@@ -234,6 +234,7 @@ def copy_config(config_path: Path, run_dir: Path, config: dict[str, Any]) -> Non
 
 def print_plan(config_path: Path, config: dict[str, Any], run_name: str, run_dir: Path) -> None:
     dataset = get_section(config, "dataset")
+    prepare = get_section(config, "prepare")
     model = get_section(config, "model")
     train = get_section(config, "train")
     plan = {
@@ -241,6 +242,7 @@ def print_plan(config_path: Path, config: dict[str, Any], run_name: str, run_dir
         "source": str(resolve_path(dataset.get("source", "data/MIR-WM811K"))),
         "dataset": str(resolve_path(dataset.get("output", "data/wm811k_cls"))),
         "ratios": dataset.get("ratios", [60, 15, 25]),
+        "prepare_enabled": prepare.get("enabled", True),
         "model": model.get("name", "yolo11m-cls.pt"),
         "epochs": train.get("epochs", 40),
         "run_name": run_name,
@@ -256,6 +258,7 @@ def main() -> int:
     train_config = get_section(config, "train")
     logging_config = get_section(config, "logging")
     dataset_config = get_section(config, "dataset")
+    prepare_config = get_section(config, "prepare")
     validate_config = get_section(config, "validate")
     test_config = get_section(config, "test")
 
@@ -275,7 +278,8 @@ def main() -> int:
         print(f"[pipeline] Log file: {log_path}")
         copy_config(config_path, run_dir, config)
 
-        if args.skip_prepare:
+        prepare_enabled = bool(prepare_config.get("enabled", True))
+        if args.skip_prepare or not prepare_enabled:
             print("[prepare] Skipped")
         else:
             print("\n[prepare] Preparing WM-811K classification dataset")

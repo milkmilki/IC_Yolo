@@ -104,6 +104,9 @@ arguments, validation split, test split, and log filename. Foreground and
 background PowerShell commands are included as comments at the top of
 `configs/wm811k_cls.yaml`.
 
+Set `prepare.enabled: false` in the YAML to reuse the existing prepared dataset
+without regenerating the train/val/test split on every run.
+
 Check the resolved plan without running training:
 
 ```powershell
