@@ -5,40 +5,40 @@
 # Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','cd /d E:\Cjn\PCB_Yolo; New-Item -ItemType Directory -Force runs | Out-Null; conda run --no-capture-output -n pcb_yolo python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml *> runs/wm811k_pipeline.nohup.log'
 
 dataset:
-  source: data/MIR-WM811K
-  output: data/wm811k_cls
-  image_size: 224
-  ratios: [70, 15, 15]  # train, val, test; normalized automatically
-  include_none: false
-  seed: 42
-  overwrite: true
+  source: data/MIR-WM811K  # 原始 WM-811K 数据目录；脚本会在这里递归查找 LSWMD.pkl
+  output: data/wm811k_cls  # 转换后的 YOLO 分类数据集目录，下面应包含 train/val/test
+  image_size: 224  # wafer map 保存为 PNG 时的正方形尺寸，同时通常与训练 imgsz 保持一致
+  ratios: [70, 15, 15]  # 数据准备阶段使用的 train/val/test 划分比例，会自动归一化
+  include_none: true  # 是否把 normal/none 类加入分类任务；true 表示 9 类，false 表示只做 8 类缺陷分类
+  seed: 42  # 数据划分随机种子；保持不变可复现实验划分
+  overwrite: true  # 数据准备阶段是否删除并重建 output；仅在 prepare.enabled 为 true 时生效
 
 prepare:
-  enabled: false
+  enabled: false  # 是否重新准备/划分数据集；false 表示直接复用现有 data/wm811k_cls
 
 model:
-  name: yolo26m-cls.pt
-  pretrained: true
+  name: yolo26m-cls.pt  # Ultralytics 分类模型或本地权重路径；当前基线使用官方 YOLO26m 分类权重
+  pretrained: true  # 训练时是否使用预训练权重初始化；true 适合基线迁移学习
 
 train:
-  epochs: 5
-  imgsz: 224
-  batch: 64
-  device: "0"
-  workers: 8
-  patience: 20
-  project: runs/classify
-  name: wm811k_yolo26m
-  add_timestamp: true
-  exist_ok: true
+  epochs: 5  # 训练轮数；正式长跑可调大，快速验证可保持较小
+  imgsz: 224  # 训练输入图像尺寸，应与 dataset.image_size 一致
+  batch: 64  # 每个 batch 的图像数量；显存不足时调小
+  device: "0"  # 训练设备；"0" 表示 CUDA 第 0 张 GPU，"cpu" 表示只用 CPU
+  workers: 8  # DataLoader 数据加载进程数；Windows 下过高可能增加启动开销
+  patience: 20  # 早停耐心轮数；验证指标连续这么多轮无提升时停止
+  project: runs/classify  # Ultralytics 输出根目录
+  name: wm811k_yolo26m  # 本次实验名称前缀；启用时间戳后会追加 YYYYMMDD_HHMMSS
+  add_timestamp: true  # 是否给 run 目录追加时间戳，避免覆盖旧实验
+  exist_ok: true  # run 目录已存在时是否允许继续写入
 
 validate:
-  enabled: true
-  split: val
+  enabled: true  # 训练结束后是否执行验证
+  split: val  # 验证使用的数据划分名称
 
 test:
-  enabled: true
-  split: test
+  enabled: true  # 训练结束后是否执行测试集评估
+  split: test  # 测试使用的数据划分名称
 
 logging:
-  filename: pipeline.log
+  filename: pipeline.log  # pipeline 运行日志文件名，保存在每次 run 目录下
