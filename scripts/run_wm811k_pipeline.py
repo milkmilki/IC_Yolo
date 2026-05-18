@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import re
 import shutil
 import sys
 from datetime import datetime
@@ -13,21 +14,38 @@ import yaml
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 class Tee:
-    def __init__(self, *streams):
-        self.streams = streams
+    def __init__(self, console_stream, log_stream):
+        self.console_stream = console_stream
+        self.log_stream = log_stream
+        self._line_buffer = ""
 
     def write(self, data: str) -> int:
-        for stream in self.streams:
-            stream.write(data)
-            stream.flush()
+        self.console_stream.write(data)
+        self.console_stream.flush()
+        self._write_clean_log(data)
         return len(data)
 
     def flush(self) -> None:
-        for stream in self.streams:
-            stream.flush()
+        self.console_stream.flush()
+        self.log_stream.flush()
+
+    def _write_clean_log(self, data: str) -> None:
+        clean = ANSI_ESCAPE_RE.sub("", data)
+        clean = clean.replace("\x08", "")
+        for char in clean:
+            if char == "\r":
+                self._line_buffer = ""
+                continue
+            if char == "\n":
+                self.log_stream.write(self._line_buffer.rstrip() + "\n")
+                self._line_buffer = ""
+                continue
+            self._line_buffer += char
+        self.log_stream.flush()
 
 
 def parse_args() -> argparse.Namespace:
