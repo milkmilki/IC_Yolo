@@ -1,0 +1,38 @@
+# Background run:
+# nohup conda run -n pcb_yolo python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml > runs/wm811k_pipeline.nohup.log 2>&1 &
+
+dataset:
+  source: data/MIR-WM811K
+  output: data/wm811k_cls
+  image_size: 224
+  ratios: [60, 15, 25]  # train, val, test; normalized automatically
+  include_none: false
+  seed: 42
+  overwrite: true
+
+model:
+  name: yolo11m-cls.pt
+  pretrained: false
+
+train:
+  epochs: 40
+  imgsz: 224
+  batch: 64
+  device: "0"
+  workers: 8
+  patience: 20
+  project: runs/classify
+  name: wm811k_yolo11m
+  add_timestamp: true
+  exist_ok: true
+
+validate:
+  enabled: true
+  split: val
+
+test:
+  enabled: true
+  split: test
+
+logging:
+  filename: pipeline.log

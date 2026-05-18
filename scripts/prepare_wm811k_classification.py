@@ -180,11 +180,13 @@ def save_wafer_map(wafer_map: np.ndarray, dst: Path, image_size: int) -> None:
     image.save(dst)
 
 
-def clear_output(output_root: Path, overwrite: bool) -> None:
+def clear_output(output_root: Path, overwrite: bool, include_none: bool) -> None:
     if output_root.exists() and overwrite:
         shutil.rmtree(output_root)
     for split_name in ("train", "val", "test"):
         for class_name in CLASS_NAMES:
+            if class_name == "none" and not include_none:
+                continue
             (output_root / split_name / class_name).mkdir(parents=True, exist_ok=True)
 
 
@@ -194,7 +196,7 @@ def main() -> int:
     output_root = args.output.resolve()
     pickle_path = find_lswmd_pickle(source_root)
 
-    clear_output(output_root, args.overwrite)
+    clear_output(output_root, args.overwrite, args.include_none)
 
     install_pickle_compatibility_shims()
 

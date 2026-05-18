@@ -91,6 +91,32 @@ python scripts/train_wm811k_cls.py --data data/wm811k_cls --model yolov8n-cls.pt
 
 Use `--device cpu` if CUDA is not available.
 
+## Run From YAML
+
+The full prepare/train/validate/test workflow can be driven by:
+
+```powershell
+conda run -n pcb_yolo python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml
+```
+
+The YAML config controls the model checkpoint, dataset split ratios, training
+arguments, validation split, test split, and log filename. A Linux `nohup`
+background command is included as a comment at the top of
+`configs/wm811k_cls.yaml`.
+
+Check the resolved plan without running training:
+
+```powershell
+python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml --check-config
+```
+
+Pipeline logs are streamed to the console and written in real time under the
+current run directory, for example:
+
+```text
+runs/classify/wm811k_yolo11m_YYYYMMDD_HHMMSS/pipeline.log
+```
+
 ## Smoke Test
 
 Run a quick test on a small fraction of the dataset:
