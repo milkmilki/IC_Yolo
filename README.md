@@ -120,6 +120,13 @@ current run directory, for example:
 runs/classify/wm811k_yolo26m_YYYYMMDD_HHMMSS/pipeline.log
 ```
 
+When `metrics.enabled: true`, the pipeline also writes precision, recall,
+F1-score, support, and confusion matrix CSV files under:
+
+```text
+runs/classify/<run_name>/metrics/
+```
+
 ## Smoke Test
 
 Run a quick test on a small fraction of the dataset:

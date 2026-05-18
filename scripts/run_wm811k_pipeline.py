@@ -225,6 +225,40 @@ def evaluate(model, data_root: Path, split: str, phase: str) -> None:
     model.val(data=str(data_root), split=split)
 
 
+def compute_classification_metrics(
+    run_dir: Path,
+    data_root: Path,
+    split: str,
+    device: str,
+    imgsz: int,
+    batch: int,
+) -> None:
+    from evaluate_wm811k_cls import main as evaluate_metrics_main
+
+    print(f"\n[metrics] Computing precision/recall/F1 for split='{split}'")
+    argv = [
+        "evaluate_wm811k_cls.py",
+        "--run-dir",
+        str(run_dir),
+        "--data",
+        str(data_root),
+        "--split",
+        split,
+        "--device",
+        device,
+        "--imgsz",
+        str(imgsz),
+        "--batch",
+        str(batch),
+    ]
+    original_argv = sys.argv[:]
+    try:
+        sys.argv = argv
+        evaluate_metrics_main()
+    finally:
+        sys.argv = original_argv
+
+
 def copy_config(config_path: Path, run_dir: Path, config: dict[str, Any]) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(config_path, run_dir / "config.yaml")
@@ -261,6 +295,7 @@ def main() -> int:
     prepare_config = get_section(config, "prepare")
     validate_config = get_section(config, "validate")
     test_config = get_section(config, "test")
+    metrics_config = get_section(config, "metrics")
 
     run_name = build_run_name(train_config)
     run_dir = build_run_dir(train_config, run_name)
@@ -304,6 +339,15 @@ def main() -> int:
             evaluate(model, data_root, str(test_config.get("split", "test")), "test")
         else:
             print("[test] Skipped")
+
+        if metrics_config.get("enabled", False):
+            train_device = str(train_config.get("device", "0"))
+            train_imgsz = int(train_config.get("imgsz", dataset_config.get("image_size", 224)))
+            metrics_batch = int(metrics_config.get("batch", train_config.get("batch", 64)))
+            for split in metrics_config.get("splits", []):
+                compute_classification_metrics(run_dir, data_root, str(split), train_device, train_imgsz, metrics_batch)
+        else:
+            print("[metrics] Skipped")
 
         print("\n[pipeline] Done")
     return 0

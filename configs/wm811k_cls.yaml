@@ -40,5 +40,10 @@ test:
   enabled: true  # 训练结束后是否执行测试集评估
   split: test  # 测试使用的数据划分名称
 
+metrics:
+  enabled: true  # 是否额外计算 precision/recall/F1 等分类指标
+  splits: [val, test]  # 需要生成详细分类报告的数据划分
+  batch: 128  # 计算详细指标时的预测 batch size
+
 logging:
   filename: pipeline.log  # pipeline 运行日志文件名，保存在每次 run 目录下
