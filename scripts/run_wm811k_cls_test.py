@@ -15,7 +15,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="YOLO26m-cls.pt",
+        default="yolo26m-cls.pt",
         help="YOLO classification checkpoint or model name",
     )
     parser.add_argument("--epochs", type=int, default=1, help="Test training epochs")
@@ -54,6 +54,7 @@ def resolve_model_name(model_arg: str) -> str:
     candidates = [
         model_arg,
         model_arg.lower(),
+        "yolo26m-cls.pt",
         "yolo11m-cls.pt",
         "yolov8m-cls.pt",
         "yolov8n-cls.pt",
@@ -65,10 +66,10 @@ def resolve_model_name(model_arg: str) -> str:
             return str(candidate_path)
 
     warnings.warn(
-        f"Could not find requested model '{model_arg}'. Falling back to 'yolo11m-cls.pt'.",
+        f"Could not find requested model '{model_arg}'. Falling back to 'yolo26m-cls.pt'.",
         RuntimeWarning,
     )
-    return "yolo11m-cls.pt"
+    return "yolo26m-cls.pt"
 
 
 def main() -> int:

@@ -14,7 +14,7 @@ dataset:
   overwrite: true
 
 model:
-  name: YOLO26m-cls.pt
+  name: yolo26m-cls.pt
   pretrained: false
 
 train:

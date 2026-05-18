@@ -114,7 +114,7 @@ Pipeline logs are streamed to the console and written in real time under the
 current run directory, for example:
 
 ```text
-runs/classify/wm811k_yolo11m_YYYYMMDD_HHMMSS/pipeline.log
+runs/classify/wm811k_yolo26m_YYYYMMDD_HHMMSS/pipeline.log
 ```
 
 ## Smoke Test
