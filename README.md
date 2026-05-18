@@ -96,12 +96,12 @@ Use `--device cpu` if CUDA is not available.
 The full prepare/train/validate/test workflow can be driven by:
 
 ```powershell
-conda run -n pcb_yolo python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml
+conda run --no-capture-output -n pcb_yolo python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml
 ```
 
 The YAML config controls the model checkpoint, dataset split ratios, training
-arguments, validation split, test split, and log filename. A Linux `nohup`
-background command is included as a comment at the top of
+arguments, validation split, test split, and log filename. Foreground and
+background PowerShell commands are included as comments at the top of
 `configs/wm811k_cls.yaml`.
 
 Check the resolved plan without running training:

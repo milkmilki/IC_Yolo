@@ -131,6 +131,36 @@ def require_dataset(data_root: Path) -> None:
         raise FileNotFoundError(f"Missing dataset split folders under {data_root}: {', '.join(missing)}")
 
 
+def log_torch_runtime(device: str) -> None:
+    import torch
+
+    print(f"[runtime] torch={torch.__version__}")
+    print(f"[runtime] torch_cuda={torch.version.cuda}")
+    print(f"[runtime] cuda_available={torch.cuda.is_available()}")
+    print(f"[runtime] requested_device={device}")
+    if torch.cuda.is_available():
+        print(f"[runtime] cuda_device_count={torch.cuda.device_count()}")
+        for index in range(torch.cuda.device_count()):
+            print(f"[runtime] cuda:{index}={torch.cuda.get_device_name(index)}")
+    elif device.lower() != "cpu":
+        raise RuntimeError(
+            f"Config requested device '{device}', but PyTorch cannot access CUDA. "
+            "Install a CUDA-enabled PyTorch build or set train.device to 'cpu'."
+        )
+
+
+def resolve_model_path(model_name: str) -> str:
+    model_path = Path(model_name)
+    if model_path.exists() or model_path.is_absolute():
+        return str(model_path)
+
+    root_model_path = PROJECT_ROOT / model_path
+    if root_model_path.exists():
+        return str(root_model_path)
+
+    return model_name
+
+
 def train_model(config: dict[str, Any], run_name: str):
     from ultralytics import YOLO
 
@@ -141,13 +171,18 @@ def train_model(config: dict[str, Any], run_name: str):
     data_root = resolve_path(dataset_config.get("output", "data/wm811k_cls"))
     require_dataset(data_root)
 
-    model = YOLO(str(model_config.get("name", "yolo11m-cls.pt")))
+    device = str(train_config.get("device", "0"))
+    log_torch_runtime(device)
+    model_name = resolve_model_path(str(model_config.get("name", "yolo11m-cls.pt")))
+    print(f"[runtime] model={model_name}")
+
+    model = YOLO(model_name)
     model.train(
         data=str(data_root),
         epochs=int(train_config.get("epochs", 40)),
         imgsz=int(train_config.get("imgsz", dataset_config.get("image_size", 224))),
         batch=int(train_config.get("batch", 64)),
-        device=str(train_config.get("device", "0")),
+        device=device,
         workers=int(train_config.get("workers", 8)),
         patience=int(train_config.get("patience", 20)),
         project=str(resolve_path(train_config.get("project", "runs/classify"))),
@@ -164,7 +199,7 @@ def find_best_model(run_dir: Path, fallback_model: str):
     best = run_dir / "weights" / "best.pt"
     if best.exists():
         return YOLO(str(best))
-    return YOLO(fallback_model)
+    return YOLO(resolve_model_path(fallback_model))
 
 
 def evaluate(model, data_root: Path, split: str, phase: str) -> None:
