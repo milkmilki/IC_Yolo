@@ -10,6 +10,7 @@ It no longer contains a PCB detection workflow.
 
 - `scripts/prepare_wm811k_classification.py`: converts `LSWMD.pkl` wafer maps into PNG images arranged by class and split.
 - `scripts/train_wm811k_cls.py`: trains a YOLO classification model on the prepared WM-811K dataset.
+- `scripts/train_wm811k_yoloctm.py`: trains the proposed YoloCTM (YOLO backbone + CTM head) classifier on WM-811K.
 - `scripts/run_wm811k_cls_test.py`: runs a small CPU-friendly smoke test using a fraction of the dataset.
 - `requirements.txt`: Python dependencies.
 
@@ -90,6 +91,14 @@ python scripts/train_wm811k_cls.py --data data/wm811k_cls --model yolov8n-cls.pt
 ```
 
 Use `--device cpu` if CUDA is not available.
+
+
+Train the YoloCTM variant:
+
+```powershell
+python scripts/train_wm811k_yoloctm.py --data data/wm811k_cls --model yolov8n-cls.pt --epochs 40 --imgsz 224 --batch 64 --device cuda --name wm811k_yoloctm
+```
+
 
 ## Run From YAML
 
