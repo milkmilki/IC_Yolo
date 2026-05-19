@@ -31,6 +31,15 @@ An experiment scaffold for WM-811K research, inspired by `karpathy/autoresearch`
 - `AutoResearch/results.tsv` tracks every experiment in a compact table.
 - `AutoResearch/logs/*.json` stores one JSON summary per logged run.
 
+## Remote Workspace
+
+- This repository is mounted from a network drive, so the active execution environment may not be local to the files you see here.
+- If you need to inspect or run the workspace on the development machine directly, connect by SSH:
+  - Host: `10.129.136.178`
+  - Username: `du`
+  - Command: `ssh du@10.129.136.178`
+- Treat paths, runtimes, and long training jobs as remote-first; do not assume a local-only workflow.
+
 ## Typical loop
 
 1. Run a fixed-budget experiment.
@@ -43,4 +52,3 @@ An experiment scaffold for WM-811K research, inspired by `karpathy/autoresearch`
 - `AutoResearch/program.md`
 - `AutoResearch/configs/wm811k_autoresearch.yaml`
 - `AutoResearch/scripts/log_experiment.py`
-

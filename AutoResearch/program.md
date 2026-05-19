@@ -15,6 +15,8 @@ Secondary metric is parameter count.
 - Keep the image size fixed for the whole campaign.
 - Do not add a large hyperparameter search space.
 - Prefer structural changes over tuning.
+- The workspace is mounted on a network drive, so the actual execution environment may be on a remote development host.
+- When remote access is needed, use `ssh du@10.129.136.178` on host `10.129.136.178` with username `du`.
 
 ## Allowed edit surface
 
@@ -67,4 +69,3 @@ Each log should capture:
 - validation metrics
 - test metrics
 - short description of the idea
-
