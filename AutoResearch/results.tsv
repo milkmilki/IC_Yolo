@@ -1,0 +1,2 @@
+timestamp	status	algorithm	run_dir	params_m	epochs	imgsz	batch	device	model_summary	val_acc	val_macro_p	val_macro_r	val_macro_f1	test_acc	test_macro_p	test_macro_r	test_macro_f1	description
+
