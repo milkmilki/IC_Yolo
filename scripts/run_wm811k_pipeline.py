@@ -179,7 +179,27 @@ def resolve_model_path(model_name: str) -> str:
     return model_name
 
 
-def train_model(config: dict[str, Any], run_name: str):
+def resolve_optional_model_path(value: Any) -> str | None:
+    if value is None or str(value).strip() == "":
+        return None
+    return resolve_model_path(str(value))
+
+
+def get_model_algorithm(config: dict[str, Any]) -> str:
+    algorithm = str(get_section(config, "model").get("algorithm", "yolo")).lower()
+    if algorithm not in {"yolo", "yoloctm"}:
+        raise ValueError("model.algorithm must be one of: yolo, yoloctm")
+    return algorithm
+
+
+def get_model_sources(model_config: dict[str, Any]) -> tuple[str | None, str | None]:
+    model_config_path = resolve_optional_model_path(model_config.get("config"))
+    legacy_name = model_config.get("name")
+    weights = resolve_optional_model_path(model_config.get("weights", legacy_name))
+    return model_config_path, weights
+
+
+def train_yolo_model(config: dict[str, Any], run_name: str):
     from ultralytics import YOLO
 
     dataset_config = get_section(config, "dataset")
@@ -191,10 +211,17 @@ def train_model(config: dict[str, Any], run_name: str):
 
     device = str(train_config.get("device", "0"))
     log_torch_runtime(device)
-    model_name = resolve_model_path(str(model_config.get("name", "yolo11m-cls.pt")))
-    print(f"[runtime] model={model_name}")
+    model_config_path, weights = get_model_sources(model_config)
+    pretrained = bool(model_config.get("pretrained", False))
+    model_source = model_config_path or weights or "yolo11m-cls.pt"
+    print(f"[runtime] algorithm=yolo")
+    print(f"[runtime] model_config={model_config_path}")
+    print(f"[runtime] weights={weights}")
 
-    model = YOLO(model_name)
+    model = YOLO(model_source)
+    if model_config_path and pretrained and weights:
+        model.load(weights)
+    train_pretrained = False if model_config_path and pretrained and weights else pretrained
     model.train(
         data=str(data_root),
         epochs=int(train_config.get("epochs", 40)),
@@ -206,9 +233,86 @@ def train_model(config: dict[str, Any], run_name: str):
         project=str(resolve_path(train_config.get("project", "runs/classify"))),
         name=run_name,
         exist_ok=bool(train_config.get("exist_ok", True)),
-        pretrained=bool(model_config.get("pretrained", False)),
+        pretrained=train_pretrained,
     )
     return model
+
+
+def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
+    from train_wm811k_yoloctm import main as train_yoloctm_main
+
+    dataset_config = get_section(config, "dataset")
+    model_config = get_section(config, "model")
+    train_config = get_section(config, "train")
+    ctm_config = get_section(model_config, "ctm")
+
+    data_root = resolve_path(dataset_config.get("output", "data/wm811k_cls"))
+    require_dataset(data_root)
+
+    device = str(train_config.get("device", "0"))
+    log_torch_runtime(device)
+    model_config_path, weights = get_model_sources(model_config)
+
+    print(f"[runtime] algorithm=yoloctm")
+    print(f"[runtime] model_config={model_config_path}")
+    print(f"[runtime] weights={weights}")
+
+    argv = [
+        "train_wm811k_yoloctm.py",
+        "--data",
+        str(data_root),
+        "--epochs",
+        str(train_config.get("epochs", 40)),
+        "--batch",
+        str(train_config.get("batch", 64)),
+        "--imgsz",
+        str(train_config.get("imgsz", dataset_config.get("image_size", 224))),
+        "--lr",
+        str(train_config.get("lr", 1e-3)),
+        "--weight-decay",
+        str(train_config.get("weight_decay", 1e-4)),
+        "--d-model",
+        str(ctm_config.get("d_model", 256)),
+        "--steps",
+        str(ctm_config.get("steps", 4)),
+        "--dropout",
+        str(ctm_config.get("dropout", 0.1)),
+        "--class-weight-power",
+        str(ctm_config.get("class_weight_power", 0.5)),
+        "--workers",
+        str(train_config.get("workers", 8)),
+        "--device",
+        device,
+        "--project",
+        str(resolve_path(train_config.get("project", "runs/classify"))),
+        "--name",
+        run_name,
+        "--pretrained" if bool(model_config.get("pretrained", True)) else "--no-pretrained",
+    ]
+    if model_config_path:
+        argv.extend(["--model-config", model_config_path])
+    if weights:
+        argv.extend(["--weights", weights])
+
+    original_argv = sys.argv[:]
+    try:
+        sys.argv = argv
+        train_yoloctm_main()
+    finally:
+        sys.argv = original_argv
+
+    checkpoint = build_run_dir(train_config, run_name) / "best_yoloctm.pt"
+    if not checkpoint.exists():
+        raise FileNotFoundError(f"YoloCTM checkpoint was not written: {checkpoint}")
+    return checkpoint
+
+
+def train_model(config: dict[str, Any], run_name: str) -> dict[str, Any]:
+    algorithm = get_model_algorithm(config)
+    if algorithm == "yoloctm":
+        checkpoint = train_yoloctm_model(config, run_name)
+        return {"algorithm": "yoloctm", "checkpoint": checkpoint}
+    return {"algorithm": "yolo", "model": train_yolo_model(config, run_name)}
 
 
 def find_best_model(run_dir: Path, fallback_model: str):
@@ -223,6 +327,117 @@ def find_best_model(run_dir: Path, fallback_model: str):
 def evaluate(model, data_root: Path, split: str, phase: str) -> None:
     print(f"\n[{phase}] Evaluating split='{split}'")
     model.val(data=str(data_root), split=split)
+
+
+def load_yoloctm_checkpoint(checkpoint: Path, device: str):
+    import torch
+    import torch.nn as nn
+    from train_wm811k_yoloctm import YoloCTM, build_yolo_backbone, resolve_device
+
+    torch_device = resolve_device(device)
+    try:
+        saved = torch.load(checkpoint, map_location=torch_device, weights_only=False)
+    except TypeError:
+        saved = torch.load(checkpoint, map_location=torch_device)
+    args = saved.get("args", {})
+    weights = args.get("model") or args.get("weights")
+    backbone, in_dim = build_yolo_backbone(
+        args.get("model_config"),
+        weights,
+        bool(args.get("pretrained", True)),
+        int(args.get("imgsz", 224)),
+    )
+    model = YoloCTM(
+        backbone=backbone,
+        num_classes=len(saved["classes"]),
+        in_dim=int(saved.get("in_dim", in_dim)),
+        d_model=int(args.get("d_model", 256)),
+        steps=int(args.get("steps", 4)),
+        dropout=float(args.get("dropout", 0.1)),
+    ).to(torch_device)
+    model.load_state_dict(saved["model_state"])
+    model.eval()
+    return model, saved["classes"], torch_device, nn.CrossEntropyLoss()
+
+
+def evaluate_yoloctm(
+    checkpoint: Path,
+    data_root: Path,
+    split: str,
+    phase: str,
+    device: str,
+    imgsz: int,
+    batch: int,
+    write_metrics: bool = False,
+) -> None:
+    import json
+    import numpy as np
+    import torch
+    from evaluate_wm811k_cls import write_report_csv
+    from sklearn.metrics import classification_report, confusion_matrix
+    from torch.utils.data import DataLoader
+    from torchvision import datasets, transforms
+    from torchvision.transforms import InterpolationMode
+
+    print(f"\n[{phase}] Evaluating YoloCTM split='{split}'")
+    transform = transforms.Compose(
+        [
+            transforms.Resize((imgsz, imgsz), interpolation=InterpolationMode.NEAREST),
+            transforms.ToTensor(),
+        ]
+    )
+    dataset = datasets.ImageFolder(data_root / split, transform=transform)
+    loader = DataLoader(dataset, batch_size=batch, shuffle=False, num_workers=0, pin_memory=False)
+    model, checkpoint_classes, torch_device, criterion = load_yoloctm_checkpoint(checkpoint, device)
+    if dataset.classes != checkpoint_classes:
+        raise ValueError(f"Dataset classes do not match checkpoint classes: {dataset.classes} != {checkpoint_classes}")
+
+    total_loss = 0.0
+    correct = 0
+    total = 0
+    y_true: list[int] = []
+    y_pred: list[int] = []
+    with torch.no_grad():
+        for images, labels in loader:
+            images, labels = images.to(torch_device), labels.to(torch_device)
+            logits = model(images)
+            loss = criterion(logits, labels)
+            preds = logits.argmax(dim=1)
+            total_loss += loss.item() * labels.size(0)
+            correct += (preds == labels).sum().item()
+            total += labels.size(0)
+            y_true.extend(labels.cpu().tolist())
+            y_pred.extend(preds.cpu().tolist())
+
+    loss = total_loss / max(total, 1)
+    acc = correct / max(total, 1)
+    print(f"[{phase}] loss={loss:.4f} acc={acc:.4f} images={total}")
+
+    if not write_metrics:
+        return
+
+    report = classification_report(
+        y_true,
+        y_pred,
+        labels=list(range(len(dataset.classes))),
+        target_names=dataset.classes,
+        output_dict=True,
+        zero_division=0,
+    )
+    matrix = confusion_matrix(y_true, y_pred, labels=list(range(len(dataset.classes))))
+
+    metrics_dir = checkpoint.parent / "metrics"
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+    json_path = metrics_dir / f"{split}_classification_report.json"
+    csv_path = metrics_dir / f"{split}_classification_report.csv"
+    matrix_path = metrics_dir / f"{split}_confusion_matrix.csv"
+
+    json_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_report_csv(report, dataset.classes, csv_path)
+    np.savetxt(matrix_path, matrix, delimiter=",", fmt="%d")
+    print(f"Report JSON: {json_path}")
+    print(f"Report CSV: {csv_path}")
+    print(f"Confusion matrix CSV: {matrix_path}")
 
 
 def compute_classification_metrics(
@@ -271,13 +486,17 @@ def print_plan(config_path: Path, config: dict[str, Any], run_name: str, run_dir
     prepare = get_section(config, "prepare")
     model = get_section(config, "model")
     train = get_section(config, "train")
+    model_config_path, weights = get_model_sources(model)
     plan = {
         "config": str(config_path.resolve()),
         "source": str(resolve_path(dataset.get("source", "data/MIR-WM811K"))),
         "dataset": str(resolve_path(dataset.get("output", "data/wm811k_cls"))),
         "ratios": dataset.get("ratios", [60, 15, 25]),
         "prepare_enabled": prepare.get("enabled", True),
-        "model": model.get("name", "yolo11m-cls.pt"),
+        "algorithm": get_model_algorithm(config),
+        "model_config": model_config_path,
+        "weights": weights,
+        "pretrained": model.get("pretrained", True),
         "epochs": train.get("epochs", 40),
         "run_name": run_name,
         "run_dir": str(run_dir),
@@ -320,32 +539,78 @@ def main() -> int:
             print("\n[prepare] Preparing WM-811K classification dataset")
             prepare_dataset(dataset_config)
 
-        model = None
+        algorithm = get_model_algorithm(config)
+        model_result: dict[str, Any]
         if args.skip_train:
             print("[train] Skipped")
-            model = find_best_model(run_dir, str(get_section(config, "model").get("name", "yolo11m-cls.pt")))
+            if algorithm == "yoloctm":
+                checkpoint = run_dir / "best_yoloctm.pt"
+                if not checkpoint.exists():
+                    raise FileNotFoundError(f"YoloCTM checkpoint does not exist: {checkpoint}")
+                model_result = {"algorithm": "yoloctm", "checkpoint": checkpoint}
+            else:
+                model_config_path, weights = get_model_sources(get_section(config, "model"))
+                fallback_model = weights or model_config_path or "yolo11m-cls.pt"
+                model_result = {"algorithm": "yolo", "model": find_best_model(run_dir, fallback_model)}
         else:
-            print("\n[train] Training YOLO classification model")
-            model = train_model(config, run_name)
-            model = find_best_model(run_dir, str(get_section(config, "model").get("name", "yolo11m-cls.pt")))
+            print(f"\n[train] Training {algorithm} classification model")
+            model_result = train_model(config, run_name)
+            if algorithm == "yolo":
+                model_config_path, weights = get_model_sources(get_section(config, "model"))
+                fallback_model = weights or model_config_path or "yolo11m-cls.pt"
+                model_result["model"] = find_best_model(run_dir, fallback_model)
 
         data_root = resolve_path(dataset_config.get("output", "data/wm811k_cls"))
+        train_device = str(train_config.get("device", "0"))
+        train_imgsz = int(train_config.get("imgsz", dataset_config.get("image_size", 224)))
         if validate_config.get("enabled", True) and not args.skip_val:
-            evaluate(model, data_root, str(validate_config.get("split", "val")), "validate")
+            if model_result["algorithm"] == "yoloctm":
+                evaluate_yoloctm(
+                    model_result["checkpoint"],
+                    data_root,
+                    str(validate_config.get("split", "val")),
+                    "validate",
+                    train_device,
+                    train_imgsz,
+                    int(train_config.get("batch", 64)),
+                )
+            else:
+                evaluate(model_result["model"], data_root, str(validate_config.get("split", "val")), "validate")
         else:
             print("[validate] Skipped")
 
         if test_config.get("enabled", True) and not args.skip_test:
-            evaluate(model, data_root, str(test_config.get("split", "test")), "test")
+            if model_result["algorithm"] == "yoloctm":
+                evaluate_yoloctm(
+                    model_result["checkpoint"],
+                    data_root,
+                    str(test_config.get("split", "test")),
+                    "test",
+                    train_device,
+                    train_imgsz,
+                    int(train_config.get("batch", 64)),
+                )
+            else:
+                evaluate(model_result["model"], data_root, str(test_config.get("split", "test")), "test")
         else:
             print("[test] Skipped")
 
         if metrics_config.get("enabled", False):
-            train_device = str(train_config.get("device", "0"))
-            train_imgsz = int(train_config.get("imgsz", dataset_config.get("image_size", 224)))
             metrics_batch = int(metrics_config.get("batch", train_config.get("batch", 64)))
             for split in metrics_config.get("splits", []):
-                compute_classification_metrics(run_dir, data_root, str(split), train_device, train_imgsz, metrics_batch)
+                if model_result["algorithm"] == "yoloctm":
+                    evaluate_yoloctm(
+                        model_result["checkpoint"],
+                        data_root,
+                        str(split),
+                        "metrics",
+                        train_device,
+                        train_imgsz,
+                        metrics_batch,
+                        write_metrics=True,
+                    )
+                else:
+                    compute_classification_metrics(run_dir, data_root, str(split), train_device, train_imgsz, metrics_batch)
         else:
             print("[metrics] Skipped")
 

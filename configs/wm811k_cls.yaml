@@ -17,11 +17,18 @@ prepare:
   enabled: false  # 是否重新准备/划分数据集；false 表示直接复用现有 data/wm811k_cls
 
 model:
-  name: yolo26m-cls.pt  # Ultralytics 分类模型或本地权重路径；当前基线使用官方 YOLO26m 分类权重
-  pretrained: true  # 训练时是否使用预训练权重初始化；true 适合基线迁移学习
+  algorithm: yoloctm  # 可选：yolo 使用 Ultralytics 分类基线；yoloctm 使用 YOLO backbone + spatial CTM head
+  config: null  # 模型结构配置文件，例如 yolo26m-cls.yaml；为 null 时直接从 weights 推断结构
+  weights: yolo26m-cls.pt  # 预训练权重文件；algorithm 为 yoloctm 时会作为 YOLO backbone 初始化权重
+  pretrained: true  # 是否加载预训练权重；true 适合迁移学习
+  ctm:
+    d_model: 256  # YoloCTM token/state 隐层维度；仅 algorithm: yoloctm 时使用
+    steps: 4  # CTM 迭代更新步数；仅 algorithm: yoloctm 时使用
+    dropout: 0.1  # CTM block dropout；仅 algorithm: yoloctm 时使用
+    class_weight_power: 0.5  # 类别权重缓和系数；0 表示不加权，1 表示完全按反频率加权
 
 train:
-  epochs: 5  # 训练轮数；正式长跑可调大，快速验证可保持较小
+  epochs: 10  # 训练轮数；正式长跑可调大，快速验证可保持较小
   imgsz: 224  # 训练输入图像尺寸，应与 dataset.image_size 一致
   batch: 64  # 每个 batch 的图像数量；显存不足时调小
   device: "0"  # 训练设备；"0" 表示 CUDA 第 0 张 GPU，"cpu" 表示只用 CPU

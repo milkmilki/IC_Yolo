@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+from torchvision.transforms import InterpolationMode
 
 
 class CTMBlock(nn.Module):
@@ -38,43 +39,87 @@ class YoloCTM(nn.Module):
     ) -> None:
         super().__init__()
         self.backbone = backbone
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        self.proj = nn.Linear(in_dim, d_model)
+        self.token_proj = nn.Linear(in_dim, d_model)
         self.ctm_blocks = nn.ModuleList(CTMBlock(d_model=d_model, dropout=dropout) for _ in range(steps))
+        self.norm = nn.LayerNorm(d_model)
         self.cls = nn.Linear(d_model, num_classes)
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
         feats = self.backbone(images)
         if feats.ndim == 2:
-            token = feats
+            tokens = feats.unsqueeze(1)
         else:
-            token = self.pool(feats).flatten(1)
-        state = self.proj(token)
+            tokens = feats.flatten(2).transpose(1, 2)
+
+        inputs = self.token_proj(tokens)
+        state = torch.zeros_like(inputs)
         for block in self.ctm_blocks:
-            state = block(state, state)
-        return self.cls(state)
+            state = block(state, inputs)
+
+        pooled = self.norm(state).mean(dim=1)
+        return self.cls(pooled)
 
 
-def build_yolo_backbone(model_name: str) -> tuple[nn.Module, int]:
+def build_yolo_backbone(
+    model_config: str | None,
+    weights: str | None,
+    pretrained: bool,
+    imgsz: int,
+) -> tuple[nn.Module, int]:
     from ultralytics import YOLO
 
-    ul_model = YOLO(model_name).model
+    if model_config:
+        ul_model = YOLO(model_config)
+        if pretrained and weights:
+            ul_model.load(weights)
+    elif weights:
+        if not pretrained:
+            raise ValueError("--model-config is required when --no-pretrained is used without a model architecture")
+        ul_model = YOLO(weights)
+    else:
+        raise ValueError("Either --model-config or --weights must be provided")
+
+    ul_model = ul_model.model
     layers = list(ul_model.model)
     if len(layers) < 2:
         raise RuntimeError("Unexpected YOLO classification architecture")
     backbone = nn.Sequential(*layers[:-1])
 
     with torch.no_grad():
-        dummy = torch.zeros(1, 3, 224, 224)
+        dummy = torch.zeros(1, 3, imgsz, imgsz)
         feats = backbone(dummy)
         in_dim = feats.shape[1] if feats.ndim > 2 else feats.shape[-1]
     return backbone, int(in_dim)
 
 
+def resolve_device(device_arg: str) -> torch.device:
+    device_arg = str(device_arg).strip().lower()
+    if device_arg == "cpu":
+        return torch.device("cpu")
+    if device_arg.isdigit():
+        if not torch.cuda.is_available():
+            raise RuntimeError(f"CUDA device '{device_arg}' was requested, but CUDA is not available")
+        return torch.device(f"cuda:{device_arg}")
+    if device_arg == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA was requested, but CUDA is not available")
+        return torch.device("cuda")
+    if device_arg.startswith("cuda:"):
+        if not torch.cuda.is_available():
+            raise RuntimeError(f"CUDA device '{device_arg}' was requested, but CUDA is not available")
+        return torch.device(device_arg)
+    if "," in device_arg:
+        raise ValueError("This standalone PyTorch trainer accepts one device only, for example '0', 'cuda:0', or 'cpu'")
+    return torch.device(device_arg)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train YoloCTM on WM-811K")
     parser.add_argument("--data", type=Path, default=Path("data/wm811k_cls"))
-    parser.add_argument("--model", default="yolov8n-cls.pt")
+    parser.add_argument("--model", default=None, help="Backward-compatible alias for --weights")
+    parser.add_argument("--model-config", default=None, help="YOLO classification architecture YAML")
+    parser.add_argument("--weights", default="yolov8n-cls.pt", help="Pretrained YOLO classification checkpoint")
+    parser.add_argument("--pretrained", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch", type=int, default=64)
     parser.add_argument("--imgsz", type=int, default=224)
@@ -82,8 +127,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--d-model", type=int, default=256)
     parser.add_argument("--steps", type=int, default=4)
+    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--class-weight-power", type=float, default=0.5)
     parser.add_argument("--workers", type=int, default=4)
-    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--device", default="0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--project", default="runs/classify")
     parser.add_argument("--name", default="wm811k_yoloctm")
     return parser.parse_args()
@@ -125,24 +172,40 @@ def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device:
 
 def main() -> int:
     args = parse_args()
-    device = torch.device(args.device)
+    device = resolve_device(args.device)
 
-    transform = transforms.Compose([
-        transforms.Resize((args.imgsz, args.imgsz)),
+    train_transform = transforms.Compose([
+        transforms.Resize((args.imgsz, args.imgsz), interpolation=InterpolationMode.NEAREST),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.RandomRotation(180, interpolation=InterpolationMode.NEAREST),
+        transforms.ToTensor(),
+    ])
+    val_transform = transforms.Compose([
+        transforms.Resize((args.imgsz, args.imgsz), interpolation=InterpolationMode.NEAREST),
         transforms.ToTensor(),
     ])
 
-    train_ds = datasets.ImageFolder(args.data / "train", transform=transform)
-    val_ds = datasets.ImageFolder(args.data / "val", transform=transform)
+    train_ds = datasets.ImageFolder(args.data / "train", transform=train_transform)
+    val_ds = datasets.ImageFolder(args.data / "val", transform=val_transform)
 
     train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=True, num_workers=args.workers, pin_memory=device.type == "cuda")
     val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False, num_workers=args.workers, pin_memory=device.type == "cuda")
 
-    backbone, in_dim = build_yolo_backbone(args.model)
-    model = YoloCTM(backbone=backbone, num_classes=len(train_ds.classes), in_dim=in_dim, d_model=args.d_model, steps=args.steps).to(device)
+    weights = args.model if args.model is not None else args.weights
+    backbone, in_dim = build_yolo_backbone(args.model_config, weights, args.pretrained, args.imgsz)
+    model = YoloCTM(
+        backbone=backbone,
+        num_classes=len(train_ds.classes),
+        in_dim=in_dim,
+        d_model=args.d_model,
+        steps=args.steps,
+        dropout=args.dropout,
+    ).to(device)
 
     class_counts = torch.bincount(torch.tensor(train_ds.targets), minlength=len(train_ds.classes)).float()
-    class_weights = (class_counts.sum() / class_counts.clamp(min=1.0)).to(device)
+    class_weights = (class_counts.sum() / class_counts.clamp(min=1.0)).pow(args.class_weight_power)
+    class_weights = (class_weights / class_weights.mean()).to(device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
@@ -164,7 +227,16 @@ def main() -> int:
         print(f"Epoch {epoch:03d}: train_loss={train_loss:.4f} train_acc={train_acc:.4f} val_loss={val_loss:.4f} val_acc={val_acc:.4f}")
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            torch.save(model.state_dict(), out_dir / "best_yoloctm.pt")
+            torch.save(
+                {
+                    "model_state": model.state_dict(),
+                    "classes": train_ds.classes,
+                    "args": vars(args),
+                    "in_dim": in_dim,
+                    "best_val_acc": best_val_acc,
+                },
+                out_dir / "best_yoloctm.pt",
+            )
 
     with (out_dir / "metrics.json").open("w", encoding="utf-8") as f:
         json.dump({"best_val_acc": best_val_acc, "history": history, "classes": train_ds.classes}, f, indent=2)

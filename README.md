@@ -10,7 +10,7 @@ It no longer contains a PCB detection workflow.
 
 - `scripts/prepare_wm811k_classification.py`: converts `LSWMD.pkl` wafer maps into PNG images arranged by class and split.
 - `scripts/train_wm811k_cls.py`: trains a YOLO classification model on the prepared WM-811K dataset.
-- `scripts/train_wm811k_yoloctm.py`: trains the proposed YoloCTM (YOLO backbone + CTM head) classifier on WM-811K.
+- `scripts/train_wm811k_yoloctm.py`: trains the proposed YoloCTM (YOLO backbone + spatial CTM head) classifier on WM-811K.
 - `scripts/run_wm811k_cls_test.py`: runs a small CPU-friendly smoke test using a fraction of the dataset.
 - `requirements.txt`: Python dependencies.
 
@@ -96,7 +96,7 @@ Use `--device cpu` if CUDA is not available.
 Train the YoloCTM variant:
 
 ```powershell
-python scripts/train_wm811k_yoloctm.py --data data/wm811k_cls --model yolov8n-cls.pt --epochs 40 --imgsz 224 --batch 64 --device cuda --name wm811k_yoloctm
+python scripts/train_wm811k_yoloctm.py --data data/wm811k_cls --model yolov8n-cls.pt --epochs 40 --imgsz 224 --batch 64 --device 0 --name wm811k_yoloctm
 ```
 
 
@@ -108,10 +108,23 @@ The full prepare/train/validate/test workflow can be driven by:
 conda run --no-capture-output -n pcb_yolo python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml
 ```
 
-The YAML config controls the model checkpoint, dataset split ratios, training
-arguments, validation split, test split, and log filename. Foreground and
+The YAML config controls the algorithm, model config file, pretrained weights,
+dataset split ratios, training arguments, validation split, test split, and log filename. Foreground and
 background PowerShell commands are included as comments at the top of
 `configs/wm811k_cls.yaml`.
+
+Select the training algorithm with:
+
+```yaml
+model:
+  algorithm: yolo      # or yoloctm
+  config: null         # optional architecture YAML
+  weights: yolo26m-cls.pt
+  pretrained: true
+```
+
+For the spatial CTM head, set `algorithm: yoloctm`; CTM-specific parameters
+live under `model.ctm`.
 
 Set `prepare.enabled: false` in the YAML to reuse the existing prepared dataset
 without regenerating the train/val/test split on every run.
