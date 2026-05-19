@@ -18,6 +18,15 @@
 - `scripts/evaluate_wm811k_cls.py`: precision, recall, F1, and confusion-matrix export for Ultralytics YOLO classification runs.
 - `scripts/run_wm811k_cls_test.py`: small CPU-friendly smoke test using a dataset fraction.
 
+## Remote Workspace
+
+- This repository is mounted on a network drive, so the execution environment may be remote rather than local.
+- When direct access to the development machine is needed, connect with SSH:
+  - Host: `10.129.136.178`
+  - Username: `du`
+  - Command: `ssh du@10.129.136.178`
+- Treat file paths, Python environments, and long-running jobs as remote-first instead of assuming a purely local setup.
+
 ## Dataset State
 
 - Expected raw WM-811K pickle: `data/MIR-WM811K/LSWMD.pkl`.
