@@ -20,7 +20,10 @@ model:
     steps: 4
     dropout: 0.1
     class_weight_power: 0.5
-    adapter_rank: 32
+    adapter_rank: 0
+    feature_adapter: true
+    logprob_fusion: true
+    logprob_fusion_init: 0.2
 
 train:
   epochs: 10
@@ -30,7 +33,7 @@ train:
   workers: 0
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_ctmadapter_lowrank_priorcal
+  name: autoresearch_yoloctm_learned_logprob_fusion
   add_timestamp: true
   exist_ok: true
 
@@ -46,9 +49,9 @@ metrics:
   enabled: true
   splits: [val, test]
   batch: 128
-  prior_logit_tau: 0.4
+  prior_logit_tau: 0.0
 
 logging:
   filename: pipeline.log
   autoresearch: true
-  description: "Low-rank CTM residual feature adapter (rank=32) before the YOLO head with fixed class-prior logit calibration tau=0.4"
+  description: "Full CTM residual feature adapter with learned in-model log-probability fusion of YOLO and CTM heads; no post-hoc prior calibration"

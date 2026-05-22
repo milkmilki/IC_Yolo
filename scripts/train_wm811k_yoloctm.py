@@ -97,6 +97,8 @@ class YoloCTM(nn.Module):
         dropout: float = 0.1,
         adapter_rank: int = 0,
         feature_adapter: bool = True,
+        logprob_fusion: bool = False,
+        logprob_fusion_init: float = 0.2,
     ) -> None:
         super().__init__()
         self.backbone = backbone
@@ -106,7 +108,13 @@ class YoloCTM(nn.Module):
         self.steps = steps
         self.norm = nn.LayerNorm(d_model)
         self.ctm_cls = nn.Linear(d_model, num_classes)
-        self.ctm_scale = nn.Parameter(torch.tensor(0.1))
+        self.logprob_fusion_enabled = bool(logprob_fusion)
+        if self.logprob_fusion_enabled:
+            init = min(max(float(logprob_fusion_init), 1e-4), 1.0 - 1e-4)
+            init_logit = np.log(init / (1.0 - init))
+            self.logprob_fusion_logit = nn.Parameter(torch.tensor(init_logit, dtype=torch.float32))
+        else:
+            self.ctm_scale = nn.Parameter(torch.tensor(0.1))
         self.feature_adapter_enabled = bool(feature_adapter)
         self.adapter_rank = int(adapter_rank)
         if self.feature_adapter_enabled and self.adapter_rank > 0:
@@ -149,7 +157,22 @@ class YoloCTM(nn.Module):
         fused_feats = self._apply_feature_adapter(feats, state)
         yolo_logits = self._as_logits(self.yolo_head(fused_feats))
         ctm_logits = self.ctm_cls(pooled)
-        logits = yolo_logits + self.ctm_scale * ctm_logits
+        if self.logprob_fusion_enabled:
+            ctm_weight = torch.sigmoid(self.logprob_fusion_logit)
+            yolo_log_probs = F.log_softmax(yolo_logits, dim=1)
+            ctm_log_probs = F.log_softmax(ctm_logits, dim=1)
+            logits = torch.logsumexp(
+                torch.stack(
+                    [
+                        yolo_log_probs + torch.log1p(-ctm_weight),
+                        ctm_log_probs + torch.log(ctm_weight),
+                    ],
+                    dim=0,
+                ),
+                dim=0,
+            )
+        else:
+            logits = yolo_logits + self.ctm_scale * ctm_logits
         if return_aux:
             return logits, ctm_logits
         return logits
@@ -303,6 +326,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--class-weight-power", type=float, default=0.5)
     parser.add_argument("--adapter-rank", type=int, default=0)
     parser.add_argument("--feature-adapter", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--logprob-fusion", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--logprob-fusion-init", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--aux-loss-weight", type=float, default=0.0)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax"], default="weighted_ce")
@@ -423,6 +448,8 @@ def main() -> int:
         dropout=args.dropout,
         adapter_rank=args.adapter_rank,
         feature_adapter=bool(args.feature_adapter),
+        logprob_fusion=bool(args.logprob_fusion),
+        logprob_fusion_init=float(args.logprob_fusion_init),
     ).to(device)
 
     class_counts = torch.bincount(torch.tensor(train_ds.targets), minlength=len(train_ds.classes)).float()
