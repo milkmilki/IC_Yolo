@@ -96,6 +96,7 @@ class YoloCTM(nn.Module):
         steps: int = 4,
         dropout: float = 0.1,
         adapter_rank: int = 0,
+        feature_adapter: bool = True,
     ) -> None:
         super().__init__()
         self.backbone = backbone
@@ -106,8 +107,9 @@ class YoloCTM(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.ctm_cls = nn.Linear(d_model, num_classes)
         self.ctm_scale = nn.Parameter(torch.tensor(0.1))
+        self.feature_adapter_enabled = bool(feature_adapter)
         self.adapter_rank = int(adapter_rank)
-        if self.adapter_rank > 0:
+        if self.feature_adapter_enabled and self.adapter_rank > 0:
             self.feature_adapter = nn.Sequential(
                 nn.Linear(d_model, self.adapter_rank, bias=False),
                 nn.SiLU(),
@@ -115,11 +117,14 @@ class YoloCTM(nn.Module):
             )
             nn.init.zeros_(self.feature_adapter[-1].weight)
             nn.init.zeros_(self.feature_adapter[-1].bias)
-        else:
+        elif self.feature_adapter_enabled:
             self.feature_adapter = nn.Linear(d_model, in_dim)
             nn.init.zeros_(self.feature_adapter.weight)
             nn.init.zeros_(self.feature_adapter.bias)
-        self.feature_adapter_scale = nn.Parameter(torch.tensor(0.05))
+        else:
+            self.feature_adapter = None
+        if self.feature_adapter_enabled:
+            self.feature_adapter_scale = nn.Parameter(torch.tensor(0.05))
 
     @staticmethod
     def _as_logits(output: torch.Tensor | tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
@@ -150,6 +155,8 @@ class YoloCTM(nn.Module):
         return logits
 
     def _apply_feature_adapter(self, feats: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+        if not self.feature_adapter_enabled or self.feature_adapter is None:
+            return feats
         residual = self.feature_adapter(state)
         if feats.ndim == 4:
             batch, _channels, height, width = feats.shape
@@ -295,6 +302,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--class-weight-power", type=float, default=0.5)
     parser.add_argument("--adapter-rank", type=int, default=0)
+    parser.add_argument("--feature-adapter", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--aux-loss-weight", type=float, default=0.0)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax"], default="weighted_ce")
@@ -414,6 +422,7 @@ def main() -> int:
         steps=args.steps,
         dropout=args.dropout,
         adapter_rank=args.adapter_rank,
+        feature_adapter=bool(args.feature_adapter),
     ).to(device)
 
     class_counts = torch.bincount(torch.tensor(train_ds.targets), minlength=len(train_ds.classes)).float()
@@ -462,7 +471,9 @@ def main() -> int:
                     "classes": train_ds.classes,
                     "args": vars(args),
                     "in_dim": in_dim,
-                    "architecture": "yolo_head_residual_shared_ctm_lowrank_adapter_macro_f1_selected",
+                    "architecture": "yolo_head_residual_shared_ctm_lowrank_adapter_macro_f1_selected"
+                    if args.feature_adapter
+                    else "yolo_head_residual_shared_ctm_macro_f1_selected",
                     "best_val_acc": best_val_acc,
                     "best_val_macro_f1": best_val_f1,
                 },

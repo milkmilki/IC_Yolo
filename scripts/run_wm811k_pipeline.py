@@ -282,6 +282,7 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         str(ctm_config.get("class_weight_power", 0.5)),
         "--adapter-rank",
         str(ctm_config.get("adapter_rank", 0)),
+        "--feature-adapter" if bool(ctm_config.get("feature_adapter", True)) else "--no-feature-adapter",
         "--seed",
         str(train_config.get("seed", dataset_config.get("seed", 42))),
         "--aux-loss-weight",
@@ -357,6 +358,11 @@ def load_yoloctm_checkpoint(checkpoint: Path, device: str):
         int(args.get("imgsz", 224)),
         len(saved["classes"]),
     )
+    model_state = saved.get("model_state", {})
+    has_feature_adapter = any(
+        key == "feature_adapter_scale" or key.startswith("feature_adapter.") for key in model_state
+    )
+    feature_adapter = bool(args.get("feature_adapter", has_feature_adapter))
     model = YoloCTM(
         backbone=backbone,
         yolo_head=yolo_head,
@@ -366,6 +372,7 @@ def load_yoloctm_checkpoint(checkpoint: Path, device: str):
         steps=int(args.get("steps", 4)),
         dropout=float(args.get("dropout", 0.1)),
         adapter_rank=int(args.get("adapter_rank", 0)),
+        feature_adapter=feature_adapter,
     ).to(torch_device)
     try:
         model.load_state_dict(saved["model_state"], strict=True)
