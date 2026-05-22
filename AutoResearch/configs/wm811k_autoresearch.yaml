@@ -22,8 +22,9 @@ model:
     class_weight_power: 0.5
     adapter_rank: 0
     feature_adapter: true
-    logprob_fusion: true
+    logprob_fusion: false
     logprob_fusion_init: 0.2
+    readout: attention
 
 train:
   epochs: 10
@@ -33,7 +34,7 @@ train:
   workers: 0
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_learned_logprob_fusion
+  name: autoresearch_yoloctm_attention_readout_priorcal
   add_timestamp: true
   exist_ok: true
 
@@ -49,9 +50,9 @@ metrics:
   enabled: true
   splits: [val, test]
   batch: 128
-  prior_logit_tau: 0.0
+  prior_logit_tau: 0.4
 
 logging:
   filename: pipeline.log
   autoresearch: true
-  description: "Full CTM residual feature adapter with learned in-model log-probability fusion of YOLO and CTM heads; no post-hoc prior calibration"
+  description: "CTM residual feature adapter before the YOLO head with attention-pooled CTM token readout and class-prior logit calibration tau=0.4"

@@ -286,6 +286,8 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         "--logprob-fusion" if bool(ctm_config.get("logprob_fusion", False)) else "--no-logprob-fusion",
         "--logprob-fusion-init",
         str(ctm_config.get("logprob_fusion_init", 0.2)),
+        "--ctm-readout",
+        str(ctm_config.get("readout", "mean")),
         "--seed",
         str(train_config.get("seed", dataset_config.get("seed", 42))),
         "--aux-loss-weight",
@@ -378,6 +380,7 @@ def load_yoloctm_checkpoint(checkpoint: Path, device: str):
         feature_adapter=feature_adapter,
         logprob_fusion=bool(args.get("logprob_fusion", False)),
         logprob_fusion_init=float(args.get("logprob_fusion_init", 0.2)),
+        ctm_readout=str(args.get("ctm_readout", "mean")),
     ).to(torch_device)
     try:
         model.load_state_dict(saved["model_state"], strict=True)

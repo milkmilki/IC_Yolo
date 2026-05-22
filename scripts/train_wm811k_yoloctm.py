@@ -99,6 +99,7 @@ class YoloCTM(nn.Module):
         feature_adapter: bool = True,
         logprob_fusion: bool = False,
         logprob_fusion_init: float = 0.2,
+        ctm_readout: str = "mean",
     ) -> None:
         super().__init__()
         self.backbone = backbone
@@ -107,6 +108,11 @@ class YoloCTM(nn.Module):
         self.ctm_block = CTMBlock(d_model=d_model, dropout=dropout)
         self.steps = steps
         self.norm = nn.LayerNorm(d_model)
+        self.ctm_readout = str(ctm_readout).lower()
+        if self.ctm_readout not in {"mean", "attention"}:
+            raise ValueError("ctm_readout must be one of: mean, attention")
+        if self.ctm_readout == "attention":
+            self.readout_query = nn.Parameter(torch.zeros(d_model))
         self.ctm_cls = nn.Linear(d_model, num_classes)
         self.logprob_fusion_enabled = bool(logprob_fusion)
         if self.logprob_fusion_enabled:
@@ -153,7 +159,7 @@ class YoloCTM(nn.Module):
             state = self.ctm_block(state, inputs)
 
         state = self.norm(state)
-        pooled = state.mean(dim=1)
+        pooled = self._pool_ctm_state(state)
         fused_feats = self._apply_feature_adapter(feats, state)
         yolo_logits = self._as_logits(self.yolo_head(fused_feats))
         ctm_logits = self.ctm_cls(pooled)
@@ -176,6 +182,14 @@ class YoloCTM(nn.Module):
         if return_aux:
             return logits, ctm_logits
         return logits
+
+    def _pool_ctm_state(self, state: torch.Tensor) -> torch.Tensor:
+        if self.ctm_readout == "mean":
+            return state.mean(dim=1)
+        query = self.readout_query.view(1, 1, -1)
+        scores = (state * query).sum(dim=-1) / float(state.shape[-1]) ** 0.5
+        weights = torch.softmax(scores, dim=1).unsqueeze(-1)
+        return (state * weights).sum(dim=1)
 
     def _apply_feature_adapter(self, feats: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         if not self.feature_adapter_enabled or self.feature_adapter is None:
@@ -328,6 +342,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--feature-adapter", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--logprob-fusion", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logprob-fusion-init", type=float, default=0.2)
+    parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--aux-loss-weight", type=float, default=0.0)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax"], default="weighted_ce")
@@ -450,6 +465,7 @@ def main() -> int:
         feature_adapter=bool(args.feature_adapter),
         logprob_fusion=bool(args.logprob_fusion),
         logprob_fusion_init=float(args.logprob_fusion_init),
+        ctm_readout=str(args.ctm_readout),
     ).to(device)
 
     class_counts = torch.bincount(torch.tensor(train_ds.targets), minlength=len(train_ds.classes)).float()
@@ -498,9 +514,12 @@ def main() -> int:
                     "classes": train_ds.classes,
                     "args": vars(args),
                     "in_dim": in_dim,
-                    "architecture": "yolo_head_residual_shared_ctm_lowrank_adapter_macro_f1_selected"
-                    if args.feature_adapter
-                    else "yolo_head_residual_shared_ctm_macro_f1_selected",
+                    "architecture": (
+                        f"yolo_head_residual_shared_ctm_{args.ctm_readout}_readout_"
+                        "lowrank_adapter_macro_f1_selected"
+                        if args.feature_adapter
+                        else f"yolo_head_residual_shared_ctm_{args.ctm_readout}_readout_macro_f1_selected"
+                    ),
                     "best_val_acc": best_val_acc,
                     "best_val_macro_f1": best_val_f1,
                 },
