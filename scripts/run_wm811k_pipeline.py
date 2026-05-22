@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib.util
 import json
 import re
 import shutil
@@ -279,6 +280,14 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         str(ctm_config.get("dropout", 0.1)),
         "--class-weight-power",
         str(ctm_config.get("class_weight_power", 0.5)),
+        "--adapter-rank",
+        str(ctm_config.get("adapter_rank", 0)),
+        "--seed",
+        str(train_config.get("seed", dataset_config.get("seed", 42))),
+        "--aux-loss-weight",
+        str(ctm_config.get("aux_loss_weight", 0.0)),
+        "--loss",
+        str(ctm_config.get("loss", "weighted_ce")),
         "--workers",
         str(train_config.get("workers", 8)),
         "--device",
@@ -332,7 +341,7 @@ def evaluate(model, data_root: Path, split: str, phase: str) -> None:
 def load_yoloctm_checkpoint(checkpoint: Path, device: str):
     import torch
     import torch.nn as nn
-    from train_wm811k_yoloctm import YoloCTM, build_yolo_backbone, resolve_device
+    from train_wm811k_yoloctm import YoloCTM, build_yolo_components, resolve_device
 
     torch_device = resolve_device(device)
     try:
@@ -341,21 +350,31 @@ def load_yoloctm_checkpoint(checkpoint: Path, device: str):
         saved = torch.load(checkpoint, map_location=torch_device)
     args = saved.get("args", {})
     weights = args.get("model") or args.get("weights")
-    backbone, in_dim = build_yolo_backbone(
+    backbone, yolo_head, in_dim = build_yolo_components(
         args.get("model_config"),
         weights,
         bool(args.get("pretrained", True)),
         int(args.get("imgsz", 224)),
+        len(saved["classes"]),
     )
     model = YoloCTM(
         backbone=backbone,
+        yolo_head=yolo_head,
         num_classes=len(saved["classes"]),
         in_dim=int(saved.get("in_dim", in_dim)),
         d_model=int(args.get("d_model", 256)),
         steps=int(args.get("steps", 4)),
         dropout=float(args.get("dropout", 0.1)),
+        adapter_rank=int(args.get("adapter_rank", 0)),
     ).to(torch_device)
-    model.load_state_dict(saved["model_state"])
+    try:
+        model.load_state_dict(saved["model_state"], strict=True)
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "Checkpoint does not exactly match YoloCTM model; refusing partial load. "
+            f"checkpoint={checkpoint}"
+        ) from exc
+    print(f"[checkpoint] strict load ok: {checkpoint}")
     model.eval()
     return model, saved["classes"], torch_device, nn.CrossEntropyLoss()
 
@@ -369,6 +388,7 @@ def evaluate_yoloctm(
     imgsz: int,
     batch: int,
     write_metrics: bool = False,
+    prior_logit_tau: float = 0.0,
 ) -> None:
     import json
     import numpy as np
@@ -378,12 +398,13 @@ def evaluate_yoloctm(
     from torch.utils.data import DataLoader
     from torchvision import datasets, transforms
     from torchvision.transforms import InterpolationMode
+    from train_wm811k_yoloctm import WaferToTensor
 
     print(f"\n[{phase}] Evaluating YoloCTM split='{split}'")
     transform = transforms.Compose(
         [
             transforms.Resize((imgsz, imgsz), interpolation=InterpolationMode.NEAREST),
-            transforms.ToTensor(),
+            WaferToTensor(),
         ]
     )
     dataset = datasets.ImageFolder(data_root / split, transform=transform)
@@ -391,6 +412,14 @@ def evaluate_yoloctm(
     model, checkpoint_classes, torch_device, criterion = load_yoloctm_checkpoint(checkpoint, device)
     if dataset.classes != checkpoint_classes:
         raise ValueError(f"Dataset classes do not match checkpoint classes: {dataset.classes} != {checkpoint_classes}")
+    log_prior = None
+    if prior_logit_tau != 0.0:
+        train_dataset = datasets.ImageFolder(data_root / "train", transform=transform)
+        if train_dataset.classes != checkpoint_classes:
+            raise ValueError(f"Train classes do not match checkpoint classes: {train_dataset.classes} != {checkpoint_classes}")
+        class_counts = torch.bincount(torch.tensor(train_dataset.targets), minlength=len(checkpoint_classes)).float()
+        log_prior = class_counts.clamp(min=1.0).log().to(torch_device)
+        print(f"[{phase}] prior_logit_tau={prior_logit_tau:.4f}")
 
     total_loss = 0.0
     correct = 0
@@ -401,6 +430,8 @@ def evaluate_yoloctm(
         for images, labels in loader:
             images, labels = images.to(torch_device), labels.to(torch_device)
             logits = model(images)
+            if log_prior is not None:
+                logits = logits + float(prior_logit_tau) * log_prior.unsqueeze(0)
             loss = criterion(logits, labels)
             preds = logits.argmax(dim=1)
             total_loss += loss.item() * labels.size(0)
@@ -481,6 +512,37 @@ def copy_config(config_path: Path, run_dir: Path, config: dict[str, Any]) -> Non
     (run_dir / "resolved_config.json").write_text(resolved, encoding="utf-8")
 
 
+def should_log_autoresearch(config_path: Path, config: dict[str, Any]) -> bool:
+    logging_config = get_section(config, "logging")
+    if "autoresearch" in logging_config:
+        return bool(logging_config["autoresearch"])
+    try:
+        config_path.relative_to(PROJECT_ROOT / "AutoResearch")
+    except ValueError:
+        return False
+    return True
+
+
+def log_autoresearch_run(run_dir: Path, status: str, description: str) -> None:
+    script_path = PROJECT_ROOT / "AutoResearch" / "scripts" / "log_experiment.py"
+    if not script_path.exists():
+        print(f"[autoresearch] Skipped logging; script not found: {script_path}")
+        return
+
+    spec = importlib.util.spec_from_file_location("autoresearch_log_experiment", script_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load AutoResearch logger: {script_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    row, payload = module.build_row(run_dir.resolve(), status, description)
+    module.append_row(row)
+    payload = json.loads(json.dumps(payload, ensure_ascii=False, default=str))
+    log_path = module.write_json_log(run_dir.resolve(), payload)
+    print(f"[autoresearch] Logged row to {module.RESULTS_PATH}")
+    print(f"[autoresearch] JSON summary: {log_path}")
+
+
 def print_plan(config_path: Path, config: dict[str, Any], run_name: str, run_dir: Path) -> None:
     dataset = get_section(config, "dataset")
     prepare = get_section(config, "prepare")
@@ -500,6 +562,7 @@ def print_plan(config_path: Path, config: dict[str, Any], run_name: str, run_dir
         "epochs": train.get("epochs", 40),
         "run_name": run_name,
         "run_dir": str(run_dir),
+        "autoresearch_logging": should_log_autoresearch(config_path, config),
     }
     print(json.dumps(plan, indent=2, ensure_ascii=False))
 
@@ -563,6 +626,7 @@ def main() -> int:
         data_root = resolve_path(dataset_config.get("output", "data/wm811k_cls"))
         train_device = str(train_config.get("device", "0"))
         train_imgsz = int(train_config.get("imgsz", dataset_config.get("image_size", 224)))
+        prior_logit_tau = float(metrics_config.get("prior_logit_tau", 0.0))
         if validate_config.get("enabled", True) and not args.skip_val:
             if model_result["algorithm"] == "yoloctm":
                 evaluate_yoloctm(
@@ -573,6 +637,7 @@ def main() -> int:
                     train_device,
                     train_imgsz,
                     int(train_config.get("batch", 64)),
+                    prior_logit_tau=prior_logit_tau,
                 )
             else:
                 evaluate(model_result["model"], data_root, str(validate_config.get("split", "val")), "validate")
@@ -589,6 +654,7 @@ def main() -> int:
                     train_device,
                     train_imgsz,
                     int(train_config.get("batch", 64)),
+                    prior_logit_tau=prior_logit_tau,
                 )
             else:
                 evaluate(model_result["model"], data_root, str(test_config.get("split", "test")), "test")
@@ -608,11 +674,16 @@ def main() -> int:
                         train_imgsz,
                         metrics_batch,
                         write_metrics=True,
+                        prior_logit_tau=prior_logit_tau,
                     )
                 else:
                     compute_classification_metrics(run_dir, data_root, str(split), train_device, train_imgsz, metrics_batch)
         else:
             print("[metrics] Skipped")
+
+        if should_log_autoresearch(config_path, config):
+            description = str(logging_config.get("description", "Fixed-budget YoloCTM baseline"))
+            log_autoresearch_run(run_dir, "keep", description)
 
         print("\n[pipeline] Done")
     return 0

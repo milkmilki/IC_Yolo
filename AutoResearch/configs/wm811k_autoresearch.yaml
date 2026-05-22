@@ -16,20 +16,21 @@ model:
   weights: yolo26m-cls.pt
   pretrained: true
   ctm:
-    d_model: 256
+    d_model: 96
     steps: 4
     dropout: 0.1
     class_weight_power: 0.5
+    adapter_rank: 32
 
 train:
   epochs: 10
   imgsz: 224
   batch: 64
   device: "0"
-  workers: 8
+  workers: 0
   patience: 20
   project: runs/classify
-  name: autoresearch_wm811k
+  name: autoresearch_yoloctm_ctmadapter_lowrank_priorcal
   add_timestamp: true
   exist_ok: true
 
@@ -45,7 +46,9 @@ metrics:
   enabled: true
   splits: [val, test]
   batch: 128
+  prior_logit_tau: 0.4
 
 logging:
   filename: pipeline.log
-
+  autoresearch: true
+  description: "Low-rank CTM residual feature adapter (rank=32) before the YOLO head with validation-selected class-prior logit calibration tau=0.4"

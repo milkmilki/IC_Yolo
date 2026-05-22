@@ -2,13 +2,62 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from torchvision.transforms import InterpolationMode
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def seed_worker(worker_id: int) -> None:
+    worker_seed = torch.initial_seed() % 2**32
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
+
+
+class WaferToTensor:
+    def __call__(self, image) -> torch.Tensor:
+        array = np.array(image, copy=True)
+        if array.ndim == 2:
+            array = np.expand_dims(array, axis=-1)
+        tensor = torch.from_numpy(array.transpose((2, 0, 1))).float()
+        return tensor.div(255.0)
+
+
+class LowRankYoloHead(nn.Module):
+    def __init__(self, in_dim: int, num_classes: int, hidden_dim: int = 256, dropout: float = 0.0) -> None:
+        super().__init__()
+        self.proj = nn.Sequential(
+            nn.Conv2d(in_dim, hidden_dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(hidden_dim),
+            nn.SiLU(inplace=True),
+        )
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.drop = nn.Dropout(dropout)
+        self.linear = nn.Linear(hidden_dim, num_classes)
+
+    def forward(self, feats: torch.Tensor) -> torch.Tensor:
+        x = self.proj(feats)
+        x = self.pool(x).flatten(1)
+        x = self.drop(x)
+        return self.linear(x)
 
 
 class CTMBlock(nn.Module):
@@ -27,24 +76,58 @@ class CTMBlock(nn.Module):
         return self.norm(updated)
 
 
+class BalancedSoftmaxLoss(nn.Module):
+    def __init__(self, class_counts: torch.Tensor) -> None:
+        super().__init__()
+        self.register_buffer("log_counts", class_counts.clamp(min=1.0).log())
+
+    def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        return F.cross_entropy(logits + self.log_counts.to(logits.device), labels)
+
+
 class YoloCTM(nn.Module):
     def __init__(
         self,
         backbone: nn.Module,
+        yolo_head: nn.Module,
         num_classes: int,
         in_dim: int,
         d_model: int = 256,
         steps: int = 4,
         dropout: float = 0.1,
+        adapter_rank: int = 0,
     ) -> None:
         super().__init__()
         self.backbone = backbone
+        self.yolo_head = yolo_head
         self.token_proj = nn.Linear(in_dim, d_model)
-        self.ctm_blocks = nn.ModuleList(CTMBlock(d_model=d_model, dropout=dropout) for _ in range(steps))
+        self.ctm_block = CTMBlock(d_model=d_model, dropout=dropout)
+        self.steps = steps
         self.norm = nn.LayerNorm(d_model)
-        self.cls = nn.Linear(d_model, num_classes)
+        self.ctm_cls = nn.Linear(d_model, num_classes)
+        self.ctm_scale = nn.Parameter(torch.tensor(0.1))
+        self.adapter_rank = int(adapter_rank)
+        if self.adapter_rank > 0:
+            self.feature_adapter = nn.Sequential(
+                nn.Linear(d_model, self.adapter_rank, bias=False),
+                nn.SiLU(),
+                nn.Linear(self.adapter_rank, in_dim, bias=True),
+            )
+            nn.init.zeros_(self.feature_adapter[-1].weight)
+            nn.init.zeros_(self.feature_adapter[-1].bias)
+        else:
+            self.feature_adapter = nn.Linear(d_model, in_dim)
+            nn.init.zeros_(self.feature_adapter.weight)
+            nn.init.zeros_(self.feature_adapter.bias)
+        self.feature_adapter_scale = nn.Parameter(torch.tensor(0.05))
 
-    def forward(self, images: torch.Tensor) -> torch.Tensor:
+    @staticmethod
+    def _as_logits(output: torch.Tensor | tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        if isinstance(output, tuple):
+            return output[1]
+        return output
+
+    def forward(self, images: torch.Tensor, return_aux: bool = False) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         feats = self.backbone(images)
         if feats.ndim == 2:
             tokens = feats.unsqueeze(1)
@@ -53,11 +136,51 @@ class YoloCTM(nn.Module):
 
         inputs = self.token_proj(tokens)
         state = torch.zeros_like(inputs)
-        for block in self.ctm_blocks:
-            state = block(state, inputs)
+        for _ in range(self.steps):
+            state = self.ctm_block(state, inputs)
 
-        pooled = self.norm(state).mean(dim=1)
-        return self.cls(pooled)
+        state = self.norm(state)
+        pooled = state.mean(dim=1)
+        fused_feats = self._apply_feature_adapter(feats, state)
+        yolo_logits = self._as_logits(self.yolo_head(fused_feats))
+        ctm_logits = self.ctm_cls(pooled)
+        logits = yolo_logits + self.ctm_scale * ctm_logits
+        if return_aux:
+            return logits, ctm_logits
+        return logits
+
+    def _apply_feature_adapter(self, feats: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+        residual = self.feature_adapter(state)
+        if feats.ndim == 4:
+            batch, _channels, height, width = feats.shape
+            residual = residual.transpose(1, 2).reshape(batch, -1, height, width)
+            return feats + self.feature_adapter_scale * residual
+        if feats.ndim == 2:
+            return feats + self.feature_adapter_scale * residual.squeeze(1)
+        return feats
+
+
+def reset_classification_head(head: nn.Module, num_classes: int) -> None:
+    linear = getattr(head, "linear", None)
+    if not isinstance(linear, nn.Linear):
+        raise RuntimeError("Unexpected YOLO classification head: missing linear layer")
+    if linear.out_features == num_classes:
+        return
+    head.linear = nn.Linear(linear.in_features, num_classes)
+
+
+def resolve_model_path(model_name: str | None) -> str | None:
+    if model_name is None or str(model_name).strip() == "":
+        return None
+    path = Path(model_name)
+    if path.is_absolute() and path.exists():
+        return str(path)
+    if path.exists():
+        return str(path.resolve())
+    project_path = PROJECT_ROOT / path
+    if project_path.exists():
+        return str(project_path)
+    return str(path)
 
 
 def build_yolo_backbone(
@@ -67,6 +190,8 @@ def build_yolo_backbone(
     imgsz: int,
 ) -> tuple[nn.Module, int]:
     from ultralytics import YOLO
+
+    weights = resolve_model_path(weights)
 
     if model_config:
         ul_model = YOLO(model_config)
@@ -90,6 +215,46 @@ def build_yolo_backbone(
         feats = backbone(dummy)
         in_dim = feats.shape[1] if feats.ndim > 2 else feats.shape[-1]
     return backbone, int(in_dim)
+
+
+def build_yolo_components(
+    model_config: str | None,
+    weights: str | None,
+    pretrained: bool,
+    imgsz: int,
+    num_classes: int,
+) -> tuple[nn.Module, nn.Module, int]:
+    from ultralytics import YOLO
+
+    weights = resolve_model_path(weights)
+
+    if model_config:
+        ul_model = YOLO(model_config)
+        if pretrained and weights:
+            ul_model.load(weights)
+    elif weights:
+        if not pretrained:
+            raise ValueError("--model-config is required when --no-pretrained is used without a model architecture")
+        ul_model = YOLO(weights)
+    else:
+        raise ValueError("Either --model-config or --weights must be provided")
+
+    layers = list(ul_model.model.model)
+    if len(layers) < 2:
+        raise RuntimeError("Unexpected YOLO classification architecture")
+    backbone = nn.Sequential(*layers[:-1])
+    yolo_head = layers[-1]
+    reset_classification_head(yolo_head, num_classes)
+
+    with torch.no_grad():
+        dummy = torch.zeros(1, 3, imgsz, imgsz)
+        feats = backbone(dummy)
+        in_dim = feats.shape[1] if feats.ndim > 2 else feats.shape[-1]
+    for parameter in backbone.parameters():
+        parameter.requires_grad_(True)
+    for parameter in yolo_head.parameters():
+        parameter.requires_grad_(True)
+    return backbone, yolo_head, int(in_dim)
 
 
 def resolve_device(device_arg: str) -> torch.device:
@@ -129,6 +294,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--class-weight-power", type=float, default=0.5)
+    parser.add_argument("--adapter-rank", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--aux-loss-weight", type=float, default=0.0)
+    parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax"], default="weighted_ce")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--device", default="0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--project", default="runs/classify")
@@ -136,7 +305,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def train_one_epoch(model: nn.Module, loader: DataLoader, criterion: nn.Module, optimizer: torch.optim.Optimizer, device: torch.device) -> tuple[float, float]:
+def train_one_epoch(
+    model: nn.Module,
+    loader: DataLoader,
+    criterion: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    aux_loss_weight: float = 0.0,
+) -> tuple[float, float]:
     model.train()
     total_loss = 0.0
     correct = 0
@@ -144,8 +320,12 @@ def train_one_epoch(model: nn.Module, loader: DataLoader, criterion: nn.Module, 
     for images, labels in loader:
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad(set_to_none=True)
-        logits = model(images)
-        loss = criterion(logits, labels)
+        if aux_loss_weight > 0:
+            logits, ctm_logits = model(images, return_aux=True)
+            loss = criterion(logits, labels) + aux_loss_weight * criterion(ctm_logits, labels)
+        else:
+            logits = model(images)
+            loss = criterion(logits, labels)
         loss.backward()
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
@@ -154,24 +334,31 @@ def train_one_epoch(model: nn.Module, loader: DataLoader, criterion: nn.Module, 
     return total_loss / max(total, 1), correct / max(total, 1)
 
 
-def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device: torch.device) -> tuple[float, float]:
+def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device: torch.device) -> tuple[float, float, float]:
     model.eval()
     total_loss = 0.0
     correct = 0
     total = 0
+    y_true: list[int] = []
+    y_pred: list[int] = []
     with torch.no_grad():
         for images, labels in loader:
             images, labels = images.to(device), labels.to(device)
             logits = model(images)
             loss = criterion(logits, labels)
+            preds = logits.argmax(dim=1)
             total_loss += loss.item() * labels.size(0)
-            correct += (logits.argmax(dim=1) == labels).sum().item()
+            correct += (preds == labels).sum().item()
             total += labels.size(0)
-    return total_loss / max(total, 1), correct / max(total, 1)
+            y_true.extend(labels.cpu().tolist())
+            y_pred.extend(preds.cpu().tolist())
+    macro_f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
+    return total_loss / max(total, 1), correct / max(total, 1), macro_f1
 
 
 def main() -> int:
     args = parse_args()
+    set_seed(int(args.seed))
     device = resolve_device(args.device)
 
     train_transform = transforms.Compose([
@@ -179,53 +366,95 @@ def main() -> int:
         transforms.RandomHorizontalFlip(),
         transforms.RandomVerticalFlip(),
         transforms.RandomRotation(180, interpolation=InterpolationMode.NEAREST),
-        transforms.ToTensor(),
+        WaferToTensor(),
     ])
     val_transform = transforms.Compose([
         transforms.Resize((args.imgsz, args.imgsz), interpolation=InterpolationMode.NEAREST),
-        transforms.ToTensor(),
+        WaferToTensor(),
     ])
 
     train_ds = datasets.ImageFolder(args.data / "train", transform=train_transform)
     val_ds = datasets.ImageFolder(args.data / "val", transform=val_transform)
 
-    train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=True, num_workers=args.workers, pin_memory=device.type == "cuda")
-    val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False, num_workers=args.workers, pin_memory=device.type == "cuda")
+    loader_generator = torch.Generator()
+    loader_generator.manual_seed(int(args.seed))
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=args.batch,
+        shuffle=True,
+        num_workers=args.workers,
+        pin_memory=device.type == "cuda",
+        worker_init_fn=seed_worker,
+        generator=loader_generator,
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=args.batch,
+        shuffle=False,
+        num_workers=args.workers,
+        pin_memory=device.type == "cuda",
+        worker_init_fn=seed_worker,
+        generator=loader_generator,
+    )
 
     weights = args.model if args.model is not None else args.weights
-    backbone, in_dim = build_yolo_backbone(args.model_config, weights, args.pretrained, args.imgsz)
+    backbone, yolo_head, in_dim = build_yolo_components(
+        args.model_config,
+        weights,
+        args.pretrained,
+        args.imgsz,
+        len(train_ds.classes),
+    )
     model = YoloCTM(
         backbone=backbone,
+        yolo_head=yolo_head,
         num_classes=len(train_ds.classes),
         in_dim=in_dim,
         d_model=args.d_model,
         steps=args.steps,
         dropout=args.dropout,
+        adapter_rank=args.adapter_rank,
     ).to(device)
 
     class_counts = torch.bincount(torch.tensor(train_ds.targets), minlength=len(train_ds.classes)).float()
-    class_weights = (class_counts.sum() / class_counts.clamp(min=1.0)).pow(args.class_weight_power)
-    class_weights = (class_weights / class_weights.mean()).to(device)
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    if args.loss == "balanced_softmax":
+        criterion = BalancedSoftmaxLoss(class_counts).to(device)
+    else:
+        class_weights = (class_counts.sum() / class_counts.clamp(min=1.0)).pow(args.class_weight_power)
+        class_weights = (class_weights / class_weights.mean()).to(device)
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     out_dir = Path(args.project) / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    best_val_f1 = 0.0
     best_val_acc = 0.0
     history: list[dict[str, float]] = []
     for epoch in range(1, args.epochs + 1):
-        train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
-        val_loss, val_acc = evaluate(model, val_loader, criterion, device)
+        train_loss, train_acc = train_one_epoch(
+            model,
+            train_loader,
+            criterion,
+            optimizer,
+            device,
+            aux_loss_weight=float(args.aux_loss_weight),
+        )
+        val_loss, val_acc, val_macro_f1 = evaluate(model, val_loader, criterion, device)
         history.append({
             "epoch": epoch,
             "train_loss": train_loss,
             "train_acc": train_acc,
             "val_loss": val_loss,
             "val_acc": val_acc,
+            "val_macro_f1": val_macro_f1,
         })
-        print(f"Epoch {epoch:03d}: train_loss={train_loss:.4f} train_acc={train_acc:.4f} val_loss={val_loss:.4f} val_acc={val_acc:.4f}")
-        if val_acc > best_val_acc:
+        print(
+            f"Epoch {epoch:03d}: train_loss={train_loss:.4f} train_acc={train_acc:.4f} "
+            f"val_loss={val_loss:.4f} val_acc={val_acc:.4f} val_macro_f1={val_macro_f1:.4f}"
+        )
+        if val_macro_f1 > best_val_f1:
+            best_val_f1 = val_macro_f1
             best_val_acc = val_acc
             torch.save(
                 {
@@ -233,13 +462,19 @@ def main() -> int:
                     "classes": train_ds.classes,
                     "args": vars(args),
                     "in_dim": in_dim,
+                    "architecture": "yolo_head_residual_shared_ctm_lowrank_adapter_macro_f1_selected",
                     "best_val_acc": best_val_acc,
+                    "best_val_macro_f1": best_val_f1,
                 },
                 out_dir / "best_yoloctm.pt",
             )
 
     with (out_dir / "metrics.json").open("w", encoding="utf-8") as f:
-        json.dump({"best_val_acc": best_val_acc, "history": history, "classes": train_ds.classes}, f, indent=2)
+        json.dump(
+            {"best_val_acc": best_val_acc, "best_val_macro_f1": best_val_f1, "history": history, "classes": train_ds.classes},
+            f,
+            indent=2,
+        )
 
     print(f"Saved best model to {out_dir / 'best_yoloctm.pt'}")
     return 0
