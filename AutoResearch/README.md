@@ -31,14 +31,13 @@ An experiment scaffold for WM-811K research, inspired by `karpathy/autoresearch`
 - `AutoResearch/results.tsv` tracks every experiment in a compact table.
 - `AutoResearch/logs/*.json` stores one JSON summary per logged run.
 
-## Remote Workspace
+## Development Machine Workflow
 
-- This repository is mounted from a network drive, so the active execution environment may not be local to the files you see here.
-- If you need to inspect or run the workspace on the development machine directly, connect by SSH:
-  - Host: `10.129.136.178`
-  - Username: `du`
-  - Command: `ssh du@10.129.136.178`
-- Treat paths, runtimes, and long training jobs as remote-first; do not assume a local-only workflow.
+- Run training and evaluation from a terminal opened directly on the development machine.
+- Treat the project as a local workspace there, usually `E:\Cjn\PCB_Yolo`.
+- Prefer explicit Python: `D:\anaconda3\envs\pcb_yolo\python.exe`.
+- Use the mounted `R:\Cjn\PCB_Yolo` view only for lightweight editing/inspection; do not launch long training through it.
+- Do not wrap long experiments in SSH commands from another machine. Open a terminal on the development machine and run local commands.
 
 ## Typical loop
 

@@ -1,5 +1,7 @@
 # Agent Notes for PCB_Yolo
 
+For the latest WM811K AutoResearch runbook, including local development-host launch commands, health checks, and current best YoloCTM result notes, also read `agent.md`.
+
 ## Project Summary
 
 - This repository is a WM-811K wafer-map defect classification experiment, not a PCB detection project.
@@ -18,14 +20,13 @@
 - `scripts/evaluate_wm811k_cls.py`: precision, recall, F1, and confusion-matrix export for Ultralytics YOLO classification runs.
 - `scripts/run_wm811k_cls_test.py`: small CPU-friendly smoke test using a dataset fraction.
 
-## Remote Workspace
+## Development Environment
 
-- This repository is mounted on a network drive, so the execution environment may be remote rather than local.
-- When direct access to the development machine is needed, connect with SSH:
-  - Host: `10.129.136.178`
-  - Username: `du`
-  - Command: `ssh du@10.129.136.178`
-- Treat file paths, Python environments, and long-running jobs as remote-first instead of assuming a purely local setup.
+- Long training and evaluation should be run from a terminal opened directly on the development machine, not by wrapping commands through SSH from the mounted network drive.
+- On the development machine, treat the project as a local workspace, usually `E:\Cjn\PCB_Yolo`.
+- Prefer the project Python explicitly: `D:\anaconda3\envs\pcb_yolo\python.exe`.
+- Use local Windows commands such as `cd /d E:\Cjn\PCB_Yolo`, `nvidia-smi`, `wmic`, and direct Python invocations.
+- The mounted `R:\Cjn\PCB_Yolo` view may be useful for editing/inspection, but do not launch long training jobs through that mount.
 
 ## Dataset State
 
@@ -41,8 +42,8 @@
 - Prepare dataset: `python scripts/prepare_wm811k_classification.py --source data/MIR-WM811K --output data/wm811k_cls --image-size 224 --include-none --ratios 70 15 15 --overwrite`.
 - Train YOLO baseline: `python scripts/train_wm811k_cls.py --data data/wm811k_cls --model yolov8n-cls.pt --epochs 40 --imgsz 224 --batch 64 --device 0`.
 - Train YoloCTM directly: `python scripts/train_wm811k_yoloctm.py --data data/wm811k_cls --weights yolo26m-cls.pt --epochs 40 --imgsz 224 --batch 64 --device 0 --name wm811k_yoloctm`.
-- Run configured pipeline: `conda run --no-capture-output -n pcb_yolo python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml`.
-- Check resolved pipeline plan without training: `conda run --no-capture-output -n pcb_yolo python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml --check-config`.
+- Run configured pipeline on the development machine: `D:\anaconda3\envs\pcb_yolo\python.exe scripts\run_wm811k_pipeline.py --config configs\wm811k_cls.yaml`.
+- Check resolved pipeline plan without training: `D:\anaconda3\envs\pcb_yolo\python.exe scripts\run_wm811k_pipeline.py --config configs\wm811k_cls.yaml --check-config`.
 - CPU smoke test: `python scripts/run_wm811k_cls_test.py --data data/wm811k_cls --model yolo26m-cls.pt --epochs 1 --device cpu --fraction 0.05`.
 
 ## Implementation Notes
@@ -59,7 +60,7 @@
 
 - The current base Python environment may not have `pyyaml`; prefer the `pcb_yolo` conda environment shown in the README/pipeline comments.
 - `configs/wm811k_cls.yaml` currently has mojibake comments, and some intended keys appear on the same commented line. Before trusting it for a run, use `--check-config` in the correct environment and verify that keys such as `ratios`, `include_none`, `pretrained`, `ctm.steps`, `train.batch`, `train.device`, `metrics.splits`, and `train.name` are actually present in the resolved plan/config.
-- Git may report dubious ownership for this network/workspace path; use a one-off safe-directory override for inspection rather than changing repo files for that issue.
+- Git may report dubious ownership when using the mounted network path; prefer running git from the development-machine local path.
 - Large artifacts are intentionally ignored: datasets, runs, caches, Kaggle credentials, and YOLO checkpoint weights.
 - Avoid changing data split defaults casually; reproducibility depends on `seed`, `ratios`, and `include_none`.
 
