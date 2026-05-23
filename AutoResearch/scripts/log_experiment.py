@@ -84,6 +84,8 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
     logit_bias_init = ctm_cfg.get("logit_bias_init") or checkpoint_meta.get("logit_bias_init")
     logit_bias_tau = ctm_cfg.get("logit_bias_prior_tau") or checkpoint_meta.get("logit_bias_prior_tau")
     anchor_loss_weight = ctm_cfg.get("anchor_loss_weight") or checkpoint_meta.get("anchor_loss_weight")
+    distill_weight = ctm_cfg.get("distill_weight") or checkpoint_meta.get("distill_weight")
+    distill_temperature = ctm_cfg.get("distill_temperature") or checkpoint_meta.get("distill_temperature")
 
     if algorithm == "yoloctm":
         summary = (
@@ -106,6 +108,8 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
                 summary += f"(tau={logit_bias_tau})"
         if anchor_loss_weight:
             summary += f" | anchor_kl={anchor_loss_weight}"
+        if distill_weight:
+            summary += f" | distill(w={distill_weight},T={distill_temperature})"
         return summary
     return str(weights)
 
@@ -147,6 +151,8 @@ def load_checkpoint_meta(run_dir: Path) -> tuple[dict[str, Any], Path | None, st
             "logit_bias_init": args.get("logit_bias_init"),
             "logit_bias_prior_tau": args.get("logit_bias_prior_tau"),
             "anchor_loss_weight": args.get("anchor_loss_weight"),
+            "distill_weight": args.get("distill_weight"),
+            "distill_temperature": args.get("distill_temperature"),
             "params": sum(t.numel() for t in saved.get("model_state", {}).values() if hasattr(t, "numel")),
         }
         return meta, checkpoint, "yoloctm"

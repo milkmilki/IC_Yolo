@@ -31,3 +31,4 @@ datasets/pku_market_pcb/
 # Keep JSON experiment summaries, but ignore transient launcher/stdout logs
 AutoResearch/logs/*.log
 AutoResearch/logs/*.txt
+AutoResearch/cache/

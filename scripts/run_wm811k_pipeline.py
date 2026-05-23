@@ -305,6 +305,10 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         str(ctm_config.get("aux_loss_weight", 0.0)),
         "--anchor-loss-weight",
         str(ctm_config.get("anchor_loss_weight", 0.0)),
+        "--distill-weight",
+        str(ctm_config.get("distill_weight", 0.0)),
+        "--distill-temperature",
+        str(ctm_config.get("distill_temperature", 2.0)),
         "--loss",
         str(ctm_config.get("loss", "weighted_ce")),
         "--workers",
@@ -321,6 +325,9 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         argv.extend(["--model-config", model_config_path])
     if weights:
         argv.extend(["--weights", weights])
+    distill_logprobs = ctm_config.get("distill_logprobs")
+    if distill_logprobs:
+        argv.extend(["--distill-logprobs", str(resolve_path(distill_logprobs))])
 
     original_argv = sys.argv[:]
     try:

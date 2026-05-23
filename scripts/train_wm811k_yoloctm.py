@@ -41,6 +41,12 @@ class WaferToTensor:
         return tensor.div(255.0)
 
 
+class IndexedImageFolder(datasets.ImageFolder):
+    def __getitem__(self, index: int):
+        image, label = super().__getitem__(index)
+        return image, label, index
+
+
 class LowRankYoloHead(nn.Module):
     def __init__(self, in_dim: int, num_classes: int, hidden_dim: int = 256, dropout: float = 0.0) -> None:
         super().__init__()
@@ -438,6 +444,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--aux-loss-weight", type=float, default=0.0)
     parser.add_argument("--anchor-loss-weight", type=float, default=0.0)
+    parser.add_argument("--distill-logprobs", type=Path, default=None, help="Optional NPZ with train-split teacher log-probabilities")
+    parser.add_argument("--distill-weight", type=float, default=0.0)
+    parser.add_argument("--distill-temperature", type=float, default=2.0)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax"], default="weighted_ce")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--device", default="0" if torch.cuda.is_available() else "cpu")
@@ -451,6 +460,42 @@ def anchor_kl_loss(fused_logits: torch.Tensor, clean_logits: torch.Tensor) -> to
     return F.kl_div(F.log_softmax(fused_logits, dim=1), teacher_probs, reduction="batchmean")
 
 
+def distillation_loss(logits: torch.Tensor, teacher_log_probs: torch.Tensor, temperature: float) -> torch.Tensor:
+    temperature = max(float(temperature), 1e-6)
+    student_log_probs = F.log_softmax(logits / temperature, dim=1)
+    teacher_probs = F.softmax(teacher_log_probs / temperature, dim=1)
+    return F.kl_div(student_log_probs, teacher_probs, reduction="batchmean") * temperature * temperature
+
+
+def unpack_batch(batch):
+    if len(batch) == 3:
+        images, labels, indices = batch
+        return images, labels, indices
+    images, labels = batch
+    return images, labels, None
+
+
+def load_distill_logprobs(path: Path, train_ds: datasets.ImageFolder) -> torch.Tensor:
+    payload = np.load(path, allow_pickle=True)
+    log_probs = np.asarray(payload["log_probs"], dtype=np.float32)
+    expected_shape = (len(train_ds), len(train_ds.classes))
+    if log_probs.shape != expected_shape:
+        raise ValueError(f"Teacher log-probs shape {log_probs.shape} does not match {expected_shape}")
+
+    if "classes" in payload:
+        cached_classes = [str(value) for value in payload["classes"].tolist()]
+        if cached_classes != list(train_ds.classes):
+            raise ValueError(f"Teacher classes do not match dataset classes: {cached_classes} != {train_ds.classes}")
+
+    if "paths" in payload:
+        cached_paths = [str(value).lower().replace("/", "\\") for value in payload["paths"].tolist()]
+        current_paths = [str(path).lower().replace("/", "\\") for path, _label in train_ds.samples]
+        if cached_paths != current_paths:
+            raise ValueError("Teacher log-prob paths do not match current train dataset order")
+
+    return torch.from_numpy(log_probs)
+
+
 def train_one_epoch(
     model: nn.Module,
     loader: DataLoader,
@@ -459,12 +504,16 @@ def train_one_epoch(
     device: torch.device,
     aux_loss_weight: float = 0.0,
     anchor_loss_weight: float = 0.0,
+    distill_logprobs: torch.Tensor | None = None,
+    distill_weight: float = 0.0,
+    distill_temperature: float = 2.0,
 ) -> tuple[float, float]:
     model.train()
     total_loss = 0.0
     correct = 0
     total = 0
-    for images, labels in loader:
+    for batch in loader:
+        images, labels, indices = unpack_batch(batch)
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad(set_to_none=True)
         if aux_loss_weight > 0 and anchor_loss_weight > 0:
@@ -483,6 +532,9 @@ def train_one_epoch(
         else:
             logits = model(images)
             loss = criterion(logits, labels)
+        if distill_logprobs is not None and indices is not None and distill_weight > 0:
+            teacher_log_probs = distill_logprobs[indices].to(device=device, non_blocking=True)
+            loss = loss + float(distill_weight) * distillation_loss(logits, teacher_log_probs, distill_temperature)
         loss.backward()
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
@@ -499,7 +551,8 @@ def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device:
     y_true: list[int] = []
     y_pred: list[int] = []
     with torch.no_grad():
-        for images, labels in loader:
+        for batch in loader:
+            images, labels, _indices = unpack_batch(batch)
             images, labels = images.to(device), labels.to(device)
             logits = model(images)
             loss = criterion(logits, labels)
@@ -530,8 +583,8 @@ def main() -> int:
         WaferToTensor(),
     ])
 
-    train_ds = datasets.ImageFolder(args.data / "train", transform=train_transform)
-    val_ds = datasets.ImageFolder(args.data / "val", transform=val_transform)
+    train_ds = IndexedImageFolder(args.data / "train", transform=train_transform)
+    val_ds = IndexedImageFolder(args.data / "val", transform=val_transform)
 
     loader_generator = torch.Generator()
     loader_generator.manual_seed(int(args.seed))
@@ -594,6 +647,13 @@ def main() -> int:
         class_weights = (class_weights / class_weights.mean()).to(device)
         criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    distill_logprobs = None
+    if args.distill_logprobs is not None and float(args.distill_weight) > 0:
+        distill_logprobs = load_distill_logprobs(args.distill_logprobs, train_ds)
+        print(
+            f"[distill] loaded teacher log-probs: {args.distill_logprobs} "
+            f"weight={float(args.distill_weight):.4f} temperature={float(args.distill_temperature):.4f}"
+        )
 
     out_dir = Path(args.project) / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -610,6 +670,9 @@ def main() -> int:
             device,
             aux_loss_weight=float(args.aux_loss_weight),
             anchor_loss_weight=float(args.anchor_loss_weight),
+            distill_logprobs=distill_logprobs,
+            distill_weight=float(args.distill_weight),
+            distill_temperature=float(args.distill_temperature),
         )
         val_loss, val_acc, val_macro_f1 = evaluate(model, val_loader, criterion, device)
         history.append({
