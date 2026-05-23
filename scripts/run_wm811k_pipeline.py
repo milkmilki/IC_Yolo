@@ -294,6 +294,11 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         str(ctm_config.get("logprob_fusion_init", 0.2)),
         "--ctm-readout",
         str(ctm_config.get("readout", "mean")),
+        "--logit-bias" if bool(ctm_config.get("logit_bias", False)) else "--no-logit-bias",
+        "--logit-bias-init",
+        str(ctm_config.get("logit_bias_init", "zero")),
+        "--logit-bias-prior-tau",
+        str(ctm_config.get("logit_bias_prior_tau", 0.4)),
         "--seed",
         str(train_config.get("seed", dataset_config.get("seed", 42))),
         "--aux-loss-weight",
@@ -382,6 +387,7 @@ def load_yoloctm_checkpoint(checkpoint: Path, device: str):
             args["token_gate_rank"] = int(token_gate_0.shape[0])
     if has_token_gate:
         feature_fusion = "token"
+    has_logit_bias = "logit_bias" in model_state
     model = YoloCTM(
         backbone=backbone,
         yolo_head=yolo_head,
@@ -398,6 +404,7 @@ def load_yoloctm_checkpoint(checkpoint: Path, device: str):
         logprob_fusion=bool(args.get("logprob_fusion", False)),
         logprob_fusion_init=float(args.get("logprob_fusion_init", 0.2)),
         ctm_readout=str(args.get("ctm_readout", "mean")),
+        logit_bias=bool(args.get("logit_bias", has_logit_bias)),
     ).to(torch_device)
     try:
         model.load_state_dict(saved["model_state"], strict=True)

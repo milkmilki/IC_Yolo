@@ -80,6 +80,9 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
     feature_fusion = ctm_cfg.get("feature_fusion") or checkpoint_meta.get("feature_fusion")
     gate_rank = ctm_cfg.get("gate_rank") or checkpoint_meta.get("gate_rank")
     token_gate_rank = ctm_cfg.get("token_gate_rank") or checkpoint_meta.get("token_gate_rank")
+    logit_bias = ctm_cfg.get("logit_bias") if "logit_bias" in ctm_cfg else checkpoint_meta.get("logit_bias")
+    logit_bias_init = ctm_cfg.get("logit_bias_init") or checkpoint_meta.get("logit_bias_init")
+    logit_bias_tau = ctm_cfg.get("logit_bias_prior_tau") or checkpoint_meta.get("logit_bias_prior_tau")
 
     if algorithm == "yoloctm":
         summary = (
@@ -96,6 +99,10 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
             summary += f"(rank={gate_rank})"
         elif feature_fusion == "token":
             summary += f"(rank={token_gate_rank})"
+        if logit_bias:
+            summary += f" | logit_bias={logit_bias_init or 'learned'}"
+            if logit_bias_tau is not None:
+                summary += f"(tau={logit_bias_tau})"
         return summary
     return str(weights)
 
@@ -133,6 +140,9 @@ def load_checkpoint_meta(run_dir: Path) -> tuple[dict[str, Any], Path | None, st
             "feature_fusion": args.get("feature_fusion"),
             "gate_rank": args.get("gate_rank"),
             "token_gate_rank": args.get("token_gate_rank"),
+            "logit_bias": args.get("logit_bias"),
+            "logit_bias_init": args.get("logit_bias_init"),
+            "logit_bias_prior_tau": args.get("logit_bias_prior_tau"),
             "params": sum(t.numel() for t in saved.get("model_state", {}).values() if hasattr(t, "numel")),
         }
         return meta, checkpoint, "yoloctm"

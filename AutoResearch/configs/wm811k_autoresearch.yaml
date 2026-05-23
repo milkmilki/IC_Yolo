@@ -22,9 +22,12 @@ model:
     class_weight_power: 0.5
     adapter_rank: 0
     feature_adapter: true
-    feature_fusion: token
+    feature_fusion: residual
     gate_rank: 16
     token_gate_rank: 16
+    logit_bias: true
+    logit_bias_init: prior
+    logit_bias_prior_tau: 0.4
     logprob_fusion: false
     logprob_fusion_init: 0.2
     readout: mean
@@ -37,7 +40,7 @@ train:
   workers: 0
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_token_spatial_gate_priorcal
+  name: autoresearch_yoloctm_learned_prior_bias
   add_timestamp: true
   exist_ok: true
 
@@ -53,9 +56,9 @@ metrics:
   enabled: true
   splits: [val, test]
   batch: 128
-  prior_logit_tau: 0.4
+  prior_logit_tau: 0.0
 
 logging:
   filename: pipeline.log
   autoresearch: true
-  description: "TAFI token-wise spatial gated CTM residual feature adapter before the YOLO head (token_gate_rank=16), mean CTM readout, and class-prior logit calibration tau=0.4"
+  description: "CTM residual feature adapter before the YOLO head with trainable class-prior logit bias initialized from tau=0.4; no eval-time prior calibration"

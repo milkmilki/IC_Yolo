@@ -103,6 +103,8 @@ class YoloCTM(nn.Module):
         logprob_fusion: bool = False,
         logprob_fusion_init: float = 0.2,
         ctm_readout: str = "mean",
+        logit_bias: bool = False,
+        logit_bias_init: torch.Tensor | None = None,
     ) -> None:
         super().__init__()
         self.backbone = backbone
@@ -117,6 +119,16 @@ class YoloCTM(nn.Module):
         if self.ctm_readout == "attention":
             self.readout_query = nn.Parameter(torch.zeros(d_model))
         self.ctm_cls = nn.Linear(d_model, num_classes)
+        if logit_bias:
+            self.logit_bias = nn.Parameter(torch.zeros(num_classes, dtype=torch.float32))
+            if logit_bias_init is not None:
+                init = torch.as_tensor(logit_bias_init, dtype=torch.float32).view(-1)
+                if init.numel() != num_classes:
+                    raise ValueError(f"logit_bias_init has {init.numel()} values, expected {num_classes}")
+                with torch.no_grad():
+                    self.logit_bias.copy_(init)
+        else:
+            self.logit_bias = None
         self.logprob_fusion_enabled = bool(logprob_fusion)
         if self.logprob_fusion_enabled:
             init = min(max(float(logprob_fusion_init), 1e-4), 1.0 - 1e-4)
@@ -207,6 +219,8 @@ class YoloCTM(nn.Module):
             )
         else:
             logits = yolo_logits + self.ctm_scale * ctm_logits
+        if self.logit_bias is not None:
+            logits = logits + self.logit_bias.view(1, -1)
         if return_aux:
             return logits, ctm_logits
         return logits
@@ -404,6 +418,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--logprob-fusion", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logprob-fusion-init", type=float, default=0.2)
     parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
+    parser.add_argument("--logit-bias", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--logit-bias-init", choices=["zero", "prior"], default="zero")
+    parser.add_argument("--logit-bias-prior-tau", type=float, default=0.4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--aux-loss-weight", type=float, default=0.0)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax"], default="weighted_ce")
@@ -506,6 +523,11 @@ def main() -> int:
         generator=loader_generator,
     )
 
+    class_counts = torch.bincount(torch.tensor(train_ds.targets), minlength=len(train_ds.classes)).float()
+    logit_bias_init = None
+    if bool(args.logit_bias) and str(args.logit_bias_init).lower() == "prior":
+        logit_bias_init = float(args.logit_bias_prior_tau) * class_counts.clamp(min=1.0).log()
+
     weights = args.model if args.model is not None else args.weights
     backbone, yolo_head, in_dim = build_yolo_components(
         args.model_config,
@@ -530,9 +552,10 @@ def main() -> int:
         logprob_fusion=bool(args.logprob_fusion),
         logprob_fusion_init=float(args.logprob_fusion_init),
         ctm_readout=str(args.ctm_readout),
+        logit_bias=bool(args.logit_bias),
+        logit_bias_init=logit_bias_init,
     ).to(device)
 
-    class_counts = torch.bincount(torch.tensor(train_ds.targets), minlength=len(train_ds.classes)).float()
     if args.loss == "balanced_softmax":
         criterion = BalancedSoftmaxLoss(class_counts).to(device)
     else:
