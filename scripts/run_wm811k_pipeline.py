@@ -309,8 +309,20 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         str(ctm_config.get("distill_weight", 0.0)),
         "--distill-temperature",
         str(ctm_config.get("distill_temperature", 2.0)),
+        "--distill-mode",
+        str(ctm_config.get("distill_mode", "full")),
+        "--classifier-cbr-weight",
+        str(ctm_config.get("classifier_cbr_weight", 0.0)),
+        "--classifier-cbr-power",
+        str(ctm_config.get("classifier_cbr_power", 1.0)),
         "--loss",
         str(ctm_config.get("loss", "weighted_ce")),
+        "--train-sampling",
+        str(train_config.get("sampling", "natural")),
+        "--none-sampling-ratio",
+        str(train_config.get("none_sampling_ratio", 0.5)),
+        "--train-sampling-start-epoch",
+        str(train_config.get("sampling_start_epoch", 1)),
         "--workers",
         str(train_config.get("workers", 8)),
         "--device",
@@ -519,6 +531,76 @@ def evaluate_yoloctm(
     print(f"Confusion matrix CSV: {matrix_path}")
 
 
+def select_yoloctm_prior_tau(
+    checkpoint: Path,
+    data_root: Path,
+    split: str,
+    device: str,
+    imgsz: int,
+    batch: int,
+    candidates: list[float],
+) -> float:
+    import json
+    import torch
+    from sklearn.metrics import f1_score, precision_score, recall_score
+    from torch.utils.data import DataLoader
+    from torchvision import datasets, transforms
+    from torchvision.transforms import InterpolationMode
+    from train_wm811k_yoloctm import WaferToTensor
+
+    print(f"\n[calibration] Selecting prior_logit_tau on split='{split}'")
+    transform = transforms.Compose(
+        [
+            transforms.Resize((imgsz, imgsz), interpolation=InterpolationMode.NEAREST),
+            WaferToTensor(),
+        ]
+    )
+    dataset = datasets.ImageFolder(data_root / split, transform=transform)
+    loader = DataLoader(dataset, batch_size=batch, shuffle=False, num_workers=0, pin_memory=False)
+    model, checkpoint_classes, torch_device, _criterion = load_yoloctm_checkpoint(checkpoint, device)
+    if dataset.classes != checkpoint_classes:
+        raise ValueError(f"Dataset classes do not match checkpoint classes: {dataset.classes} != {checkpoint_classes}")
+
+    train_dataset = datasets.ImageFolder(data_root / "train", transform=transform)
+    if train_dataset.classes != checkpoint_classes:
+        raise ValueError(f"Train classes do not match checkpoint classes: {train_dataset.classes} != {checkpoint_classes}")
+    class_counts = torch.bincount(torch.tensor(train_dataset.targets), minlength=len(checkpoint_classes)).float()
+    log_prior = class_counts.clamp(min=1.0).log().to(torch_device)
+
+    logits_list: list[torch.Tensor] = []
+    labels_list: list[torch.Tensor] = []
+    with torch.no_grad():
+        for images, labels in loader:
+            logits_list.append(model(images.to(torch_device)).cpu())
+            labels_list.append(labels.cpu())
+    logits = torch.cat(logits_list, dim=0).to(torch_device)
+    labels = torch.cat(labels_list, dim=0).numpy()
+
+    rows: list[dict[str, float]] = []
+    for tau in candidates:
+        adjusted = logits + float(tau) * log_prior.unsqueeze(0)
+        preds = adjusted.argmax(dim=1).cpu().numpy()
+        row = {
+            "tau": float(tau),
+            "macro_p": float(precision_score(labels, preds, average="macro", zero_division=0)),
+            "macro_r": float(recall_score(labels, preds, average="macro", zero_division=0)),
+            "macro_f1": float(f1_score(labels, preds, average="macro", zero_division=0)),
+        }
+        rows.append(row)
+        print(
+            f"[calibration] tau={row['tau']:.3f} "
+            f"macro_p={row['macro_p']:.4f} macro_r={row['macro_r']:.4f} macro_f1={row['macro_f1']:.4f}"
+        )
+
+    best = max(rows, key=lambda row: row["macro_f1"])
+    metrics_dir = checkpoint.parent / "metrics"
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"split": split, "selected_tau": best["tau"], "candidates": rows}
+    (metrics_dir / "prior_tau_selection.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"[calibration] selected prior_logit_tau={best['tau']:.4f}")
+    return float(best["tau"])
+
+
 def compute_classification_metrics(
     run_dir: Path,
     data_root: Path,
@@ -674,7 +756,20 @@ def main() -> int:
         data_root = resolve_path(dataset_config.get("output", "data/wm811k_cls"))
         train_device = str(train_config.get("device", "0"))
         train_imgsz = int(train_config.get("imgsz", dataset_config.get("image_size", 224)))
-        prior_logit_tau = float(metrics_config.get("prior_logit_tau", 0.0))
+        prior_logit_tau_config = metrics_config.get("prior_logit_tau", 0.0)
+        if model_result["algorithm"] == "yoloctm" and str(prior_logit_tau_config).strip().lower() == "auto":
+            candidates = [float(value) for value in metrics_config.get("prior_logit_tau_candidates", [0.2, 0.3, 0.4, 0.5, 0.6, 0.7])]
+            prior_logit_tau = select_yoloctm_prior_tau(
+                model_result["checkpoint"],
+                data_root,
+                str(validate_config.get("split", "val")),
+                train_device,
+                train_imgsz,
+                int(metrics_config.get("batch", train_config.get("batch", 64))),
+                candidates,
+            )
+        else:
+            prior_logit_tau = float(prior_logit_tau_config)
         if validate_config.get("enabled", True) and not args.skip_val:
             if model_result["algorithm"] == "yoloctm":
                 evaluate_yoloctm(

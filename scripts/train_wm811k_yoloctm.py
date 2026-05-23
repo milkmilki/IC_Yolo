@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import f1_score
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from torchvision import datasets, transforms
 from torchvision.transforms import InterpolationMode
 
@@ -30,6 +30,49 @@ def seed_worker(worker_id: int) -> None:
     worker_seed = torch.initial_seed() % 2**32
     random.seed(worker_seed)
     np.random.seed(worker_seed)
+
+
+def find_none_class_index(classes: list[str]) -> int | None:
+    for index, name in enumerate(classes):
+        if str(name).strip().lower() == "none":
+            return index
+    return None
+
+
+def build_none_aware_sampler(
+    targets: list[int],
+    classes: list[str],
+    none_sampling_ratio: float,
+    seed: int,
+) -> WeightedRandomSampler:
+    target_tensor = torch.tensor(targets, dtype=torch.long)
+    class_counts = torch.bincount(target_tensor, minlength=len(classes)).float().clamp(min=1.0)
+    target_probs = torch.zeros(len(classes), dtype=torch.float32)
+    none_index = find_none_class_index(classes)
+    present = [index for index, count in enumerate(class_counts.tolist()) if count > 0]
+    if none_index is None or none_index not in present or len(present) <= 1:
+        target_probs[present] = 1.0 / max(len(present), 1)
+    else:
+        none_ratio = min(max(float(none_sampling_ratio), 0.05), 0.95)
+        defect_indices = [index for index in present if index != none_index]
+        target_probs[none_index] = none_ratio
+        target_probs[defect_indices] = (1.0 - none_ratio) / max(len(defect_indices), 1)
+
+    sample_weights = target_probs[target_tensor] / class_counts[target_tensor]
+    generator = torch.Generator()
+    generator.manual_seed(int(seed))
+    summary = ", ".join(
+        f"{classes[index]}:{target_probs[index].item():.3f}"
+        for index in range(len(classes))
+        if target_probs[index] > 0
+    )
+    print(f"[sampling] none-aware target mix: {summary}")
+    return WeightedRandomSampler(
+        weights=sample_weights.double(),
+        num_samples=len(targets),
+        replacement=True,
+        generator=generator,
+    )
 
 
 class WaferToTensor:
@@ -447,7 +490,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--distill-logprobs", type=Path, default=None, help="Optional NPZ with train-split teacher log-probabilities")
     parser.add_argument("--distill-weight", type=float, default=0.0)
     parser.add_argument("--distill-temperature", type=float, default=2.0)
+    parser.add_argument("--distill-mode", choices=["full", "nontarget_zscore"], default="full")
+    parser.add_argument("--classifier-cbr-weight", type=float, default=0.0)
+    parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax"], default="weighted_ce")
+    parser.add_argument("--train-sampling", choices=["natural", "none_aware"], default="natural")
+    parser.add_argument("--none-sampling-ratio", type=float, default=0.5)
+    parser.add_argument("--train-sampling-start-epoch", type=int, default=1)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--device", default="0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--project", default="runs/classify")
@@ -460,11 +509,60 @@ def anchor_kl_loss(fused_logits: torch.Tensor, clean_logits: torch.Tensor) -> to
     return F.kl_div(F.log_softmax(fused_logits, dim=1), teacher_probs, reduction="batchmean")
 
 
-def distillation_loss(logits: torch.Tensor, teacher_log_probs: torch.Tensor, temperature: float) -> torch.Tensor:
+def _zscore(logits: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    mean = logits.mean(dim=1, keepdim=True)
+    std = logits.std(dim=1, keepdim=True, unbiased=False).clamp_min(eps)
+    return (logits - mean) / std
+
+
+def distillation_loss(
+    logits: torch.Tensor,
+    teacher_log_probs: torch.Tensor,
+    temperature: float,
+    labels: torch.Tensor | None = None,
+    mode: str = "full",
+) -> torch.Tensor:
     temperature = max(float(temperature), 1e-6)
+    mode = str(mode).lower()
+    if mode == "nontarget_zscore":
+        if labels is None:
+            raise ValueError("labels are required for nontarget_zscore distillation")
+        keep = torch.ones_like(logits, dtype=torch.bool)
+        keep.scatter_(1, labels.view(-1, 1), False)
+        logits = logits.masked_select(keep).view(logits.shape[0], logits.shape[1] - 1)
+        teacher_log_probs = teacher_log_probs.masked_select(keep).view(teacher_log_probs.shape[0], teacher_log_probs.shape[1] - 1)
+        logits = _zscore(logits)
+        teacher_log_probs = _zscore(teacher_log_probs)
+    elif mode != "full":
+        raise ValueError(f"Unknown distillation mode: {mode}")
+
     student_log_probs = F.log_softmax(logits / temperature, dim=1)
     teacher_probs = F.softmax(teacher_log_probs / temperature, dim=1)
     return F.kl_div(student_log_probs, teacher_probs, reduction="batchmean") * temperature * temperature
+
+
+def classifier_cbr_loss(model: nn.Module, class_counts: torch.Tensor, power: float = 1.0) -> torch.Tensor:
+    weights: list[torch.Tensor] = []
+    yolo_linear = getattr(getattr(model, "yolo_head", None), "linear", None)
+    if isinstance(yolo_linear, nn.Linear):
+        weights.append(yolo_linear.weight)
+    ctm_cls = getattr(model, "ctm_cls", None)
+    if isinstance(ctm_cls, nn.Linear):
+        weights.append(ctm_cls.weight)
+    if not weights:
+        return torch.zeros((), device=class_counts.device)
+
+    freq = class_counts.to(device=weights[0].device, dtype=weights[0].dtype).clamp(min=1.0)
+    freq_weights = (freq / freq.mean()).pow(float(power))
+    losses = []
+    for weight in weights:
+        if weight.shape[0] != freq_weights.numel():
+            continue
+        class_norms = weight.pow(2).sum(dim=1)
+        losses.append((freq_weights * class_norms).mean())
+    if not losses:
+        return torch.zeros((), device=weights[0].device)
+    return torch.stack(losses).mean()
 
 
 def unpack_batch(batch):
@@ -507,6 +605,10 @@ def train_one_epoch(
     distill_logprobs: torch.Tensor | None = None,
     distill_weight: float = 0.0,
     distill_temperature: float = 2.0,
+    distill_mode: str = "full",
+    class_counts: torch.Tensor | None = None,
+    classifier_cbr_weight: float = 0.0,
+    classifier_cbr_power: float = 1.0,
 ) -> tuple[float, float]:
     model.train()
     total_loss = 0.0
@@ -534,7 +636,19 @@ def train_one_epoch(
             loss = criterion(logits, labels)
         if distill_logprobs is not None and indices is not None and distill_weight > 0:
             teacher_log_probs = distill_logprobs[indices].to(device=device, non_blocking=True)
-            loss = loss + float(distill_weight) * distillation_loss(logits, teacher_log_probs, distill_temperature)
+            loss = loss + float(distill_weight) * distillation_loss(
+                logits,
+                teacher_log_probs,
+                distill_temperature,
+                labels=labels,
+                mode=distill_mode,
+            )
+        if class_counts is not None and classifier_cbr_weight > 0:
+            loss = loss + float(classifier_cbr_weight) * classifier_cbr_loss(
+                model,
+                class_counts,
+                power=float(classifier_cbr_power),
+            )
         loss.backward()
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
@@ -588,7 +702,7 @@ def main() -> int:
 
     loader_generator = torch.Generator()
     loader_generator.manual_seed(int(args.seed))
-    train_loader = DataLoader(
+    natural_train_loader = DataLoader(
         train_ds,
         batch_size=args.batch,
         shuffle=True,
@@ -597,6 +711,24 @@ def main() -> int:
         worker_init_fn=seed_worker,
         generator=loader_generator,
     )
+    rebalanced_train_loader = natural_train_loader
+    if args.train_sampling == "none_aware":
+        train_sampler = build_none_aware_sampler(
+            targets=list(train_ds.targets),
+            classes=list(train_ds.classes),
+            none_sampling_ratio=float(args.none_sampling_ratio),
+            seed=int(args.seed),
+        )
+        rebalanced_train_loader = DataLoader(
+            train_ds,
+            batch_size=args.batch,
+            sampler=train_sampler,
+            num_workers=args.workers,
+            pin_memory=device.type == "cuda",
+            worker_init_fn=seed_worker,
+        )
+        if int(args.train_sampling_start_epoch) > 1:
+            print(f"[sampling] deferred none-aware sampler starts at epoch {int(args.train_sampling_start_epoch)}")
     val_loader = DataLoader(
         val_ds,
         batch_size=args.batch,
@@ -652,7 +784,8 @@ def main() -> int:
         distill_logprobs = load_distill_logprobs(args.distill_logprobs, train_ds)
         print(
             f"[distill] loaded teacher log-probs: {args.distill_logprobs} "
-            f"weight={float(args.distill_weight):.4f} temperature={float(args.distill_temperature):.4f}"
+            f"weight={float(args.distill_weight):.4f} temperature={float(args.distill_temperature):.4f} "
+            f"mode={args.distill_mode}"
         )
 
     out_dir = Path(args.project) / args.name
@@ -662,6 +795,11 @@ def main() -> int:
     best_val_acc = 0.0
     history: list[dict[str, float]] = []
     for epoch in range(1, args.epochs + 1):
+        train_loader = (
+            rebalanced_train_loader
+            if args.train_sampling == "none_aware" and epoch >= int(args.train_sampling_start_epoch)
+            else natural_train_loader
+        )
         train_loss, train_acc = train_one_epoch(
             model,
             train_loader,
@@ -673,6 +811,10 @@ def main() -> int:
             distill_logprobs=distill_logprobs,
             distill_weight=float(args.distill_weight),
             distill_temperature=float(args.distill_temperature),
+            distill_mode=str(args.distill_mode),
+            class_counts=class_counts,
+            classifier_cbr_weight=float(args.classifier_cbr_weight),
+            classifier_cbr_power=float(args.classifier_cbr_power),
         )
         val_loss, val_acc, val_macro_f1 = evaluate(model, val_loader, criterion, device)
         history.append({
@@ -704,6 +846,8 @@ def main() -> int:
                     ),
                     "best_val_acc": best_val_acc,
                     "best_val_macro_f1": best_val_f1,
+                    "classifier_cbr_weight": float(args.classifier_cbr_weight),
+                    "classifier_cbr_power": float(args.classifier_cbr_power),
                 },
                 out_dir / "best_yoloctm.pt",
             )

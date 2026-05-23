@@ -1,0 +1,172 @@
+{
+  "row": {
+    "timestamp": "2026-05-23T17:29:07",
+    "status": "discard",
+    "algorithm": "yoloctm",
+    "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_ensemble_distill_priorcal_20260523_164708",
+    "params_m": "10.525",
+    "epochs": "10",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "0",
+    "model_summary": "yolo26m-cls.pt | ctm(d=96,s=4,drop=0.1,pow=0.5) | fusion=residual | distill(w=0.25,T=2.0)",
+    "val_acc": "0.9779139685476411",
+    "val_macro_p": "0.9159229880824934",
+    "val_macro_r": "0.873392101757697",
+    "val_macro_f1": "0.8917948218792581",
+    "test_acc": "0.9789522377703249",
+    "test_macro_p": "0.9182952300325399",
+    "test_macro_r": "0.8676817416104723",
+    "test_macro_f1": "0.8904913806495733",
+    "description": "Single-model CTM residual feature adapter trained with fixed log-probability ensemble distillation (w=0.25,T=2.0) and eval-time class-prior logit calibration tau=0.4; improved precision but lost too much recall, underperforming best single-model macro F1"
+  },
+  "config": {
+    "dataset": {
+      "source": "data/MIR-WM811K",
+      "output": "data/wm811k_cls",
+      "image_size": 224,
+      "ratios": [
+        70,
+        15,
+        15
+      ],
+      "include_none": true,
+      "seed": 42,
+      "overwrite": false
+    },
+    "prepare": {
+      "enabled": false
+    },
+    "model": {
+      "algorithm": "yoloctm",
+      "config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "ctm": {
+        "d_model": 96,
+        "steps": 4,
+        "dropout": 0.1,
+        "class_weight_power": 0.5,
+        "adapter_rank": 0,
+        "feature_adapter": true,
+        "feature_fusion": "residual",
+        "gate_rank": 16,
+        "token_gate_rank": 16,
+        "logit_bias": false,
+        "logit_bias_init": "zero",
+        "logit_bias_prior_tau": 0.4,
+        "anchor_loss_weight": 0.0,
+        "distill_logprobs": "AutoResearch/cache/train_logprob_ensemble_060202_tau0025.npz",
+        "distill_weight": 0.25,
+        "distill_temperature": 2.0,
+        "logprob_fusion": false,
+        "logprob_fusion_init": 0.2,
+        "readout": "mean"
+      }
+    },
+    "train": {
+      "epochs": 10,
+      "imgsz": 224,
+      "batch": 64,
+      "device": "0",
+      "workers": 0,
+      "patience": 20,
+      "project": "runs/classify",
+      "name": "autoresearch_yoloctm_ensemble_distill_priorcal",
+      "add_timestamp": true,
+      "exist_ok": true
+    },
+    "validate": {
+      "enabled": true,
+      "split": "val"
+    },
+    "test": {
+      "enabled": true,
+      "split": "test"
+    },
+    "metrics": {
+      "enabled": true,
+      "splits": [
+        "val",
+        "test"
+      ],
+      "batch": 128,
+      "prior_logit_tau": 0.4
+    },
+    "logging": {
+      "filename": "pipeline.log",
+      "autoresearch": true,
+      "description": "Single-model CTM residual feature adapter trained with fixed log-probability ensemble distillation (w=0.25,T=2.0) and eval-time class-prior logit calibration tau=0.4"
+    }
+  },
+  "checkpoint_meta": {
+    "args": {
+      "data": "E:\\Cjn\\PCB_Yolo\\data\\wm811k_cls",
+      "model": null,
+      "model_config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "epochs": 10,
+      "batch": 64,
+      "imgsz": 224,
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "d_model": 96,
+      "steps": 4,
+      "dropout": 0.1,
+      "class_weight_power": 0.5,
+      "adapter_rank": 0,
+      "feature_adapter": true,
+      "feature_fusion": "residual",
+      "gate_rank": 16,
+      "token_gate_rank": 16,
+      "logprob_fusion": false,
+      "logprob_fusion_init": 0.2,
+      "ctm_readout": "mean",
+      "logit_bias": false,
+      "logit_bias_init": "zero",
+      "logit_bias_prior_tau": 0.4,
+      "seed": 42,
+      "aux_loss_weight": 0.0,
+      "anchor_loss_weight": 0.0,
+      "distill_logprobs": "E:\\Cjn\\PCB_Yolo\\AutoResearch\\cache\\train_logprob_ensemble_060202_tau0025.npz",
+      "distill_weight": 0.25,
+      "distill_temperature": 2.0,
+      "loss": "weighted_ce",
+      "workers": 0,
+      "device": "0",
+      "project": "E:\\Cjn\\PCB_Yolo\\runs\\classify",
+      "name": "autoresearch_yoloctm_ensemble_distill_priorcal_20260523_164708"
+    },
+    "weights": "yolo26m-cls.pt",
+    "d_model": 96,
+    "steps": 4,
+    "dropout": 0.1,
+    "class_weight_power": 0.5,
+    "feature_fusion": "residual",
+    "gate_rank": 16,
+    "token_gate_rank": 16,
+    "logit_bias": false,
+    "logit_bias_init": "zero",
+    "logit_bias_prior_tau": 0.4,
+    "anchor_loss_weight": 0.0,
+    "distill_weight": 0.25,
+    "distill_temperature": 2.0,
+    "params": 10525285
+  },
+  "checkpoint_path": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_ensemble_distill_priorcal_20260523_164708\\best_yoloctm.pt",
+  "reports": {
+    "val": {
+      "acc": 0.9779139685476411,
+      "macro_p": 0.9159229880824934,
+      "macro_r": 0.873392101757697,
+      "macro_f1": 0.8917948218792581
+    },
+    "test": {
+      "acc": 0.9789522377703249,
+      "macro_p": 0.9182952300325399,
+      "macro_r": 0.8676817416104723,
+      "macro_f1": 0.8904913806495733
+    }
+  }
+}
