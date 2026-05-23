@@ -97,6 +97,8 @@ class YoloCTM(nn.Module):
         dropout: float = 0.1,
         adapter_rank: int = 0,
         feature_adapter: bool = True,
+        feature_fusion: str = "residual",
+        gate_rank: int = 16,
         logprob_fusion: bool = False,
         logprob_fusion_init: float = 0.2,
         ctm_readout: str = "mean",
@@ -122,6 +124,12 @@ class YoloCTM(nn.Module):
         else:
             self.ctm_scale = nn.Parameter(torch.tensor(0.1))
         self.feature_adapter_enabled = bool(feature_adapter)
+        self.feature_fusion = str(feature_fusion).lower()
+        if self.feature_fusion not in {"residual", "gated"}:
+            raise ValueError("feature_fusion must be one of: residual, gated")
+        if self.feature_fusion == "gated" and not self.feature_adapter_enabled:
+            raise ValueError("feature_fusion='gated' requires feature_adapter=True")
+        self.gate_rank = max(1, int(gate_rank))
         self.adapter_rank = int(adapter_rank)
         if self.feature_adapter_enabled and self.adapter_rank > 0:
             self.feature_adapter = nn.Sequential(
@@ -137,8 +145,17 @@ class YoloCTM(nn.Module):
             nn.init.zeros_(self.feature_adapter.bias)
         else:
             self.feature_adapter = None
+        self.feature_gate = None
         if self.feature_adapter_enabled:
             self.feature_adapter_scale = nn.Parameter(torch.tensor(0.05))
+            if self.feature_fusion == "gated":
+                self.feature_gate = nn.Sequential(
+                    nn.Linear(in_dim * 2, self.gate_rank, bias=False),
+                    nn.SiLU(),
+                    nn.Linear(self.gate_rank, in_dim),
+                )
+                nn.init.zeros_(self.feature_gate[-1].weight)
+                nn.init.zeros_(self.feature_gate[-1].bias)
 
     @staticmethod
     def _as_logits(output: torch.Tensor | tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
@@ -198,10 +215,28 @@ class YoloCTM(nn.Module):
         if feats.ndim == 4:
             batch, _channels, height, width = feats.shape
             residual = residual.transpose(1, 2).reshape(batch, -1, height, width)
+            if self.feature_fusion == "gated" and self.feature_gate is not None:
+                gate = self._feature_gate(feats, residual)
+                return feats + self.feature_adapter_scale * gate * residual
             return feats + self.feature_adapter_scale * residual
         if feats.ndim == 2:
-            return feats + self.feature_adapter_scale * residual.squeeze(1)
+            residual = residual.squeeze(1)
+            if self.feature_fusion == "gated" and self.feature_gate is not None:
+                gate = self._feature_gate(feats, residual)
+                return feats + self.feature_adapter_scale * gate * residual
+            return feats + self.feature_adapter_scale * residual
         return feats
+
+    def _feature_gate(self, feats: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
+        if self.feature_gate is None:
+            raise RuntimeError("feature_gate is not initialized")
+        if feats.ndim == 4:
+            feat_desc = feats.mean(dim=(2, 3))
+            residual_desc = residual.mean(dim=(2, 3))
+            gate = torch.sigmoid(self.feature_gate(torch.cat([feat_desc, residual_desc], dim=1)))
+            return gate.view(feats.shape[0], -1, 1, 1)
+        gate = torch.sigmoid(self.feature_gate(torch.cat([feats, residual], dim=1)))
+        return gate
 
 
 def reset_classification_head(head: nn.Module, num_classes: int) -> None:
@@ -340,6 +375,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--class-weight-power", type=float, default=0.5)
     parser.add_argument("--adapter-rank", type=int, default=0)
     parser.add_argument("--feature-adapter", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--feature-fusion", choices=["residual", "gated"], default="residual")
+    parser.add_argument("--gate-rank", type=int, default=16)
     parser.add_argument("--logprob-fusion", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logprob-fusion-init", type=float, default=0.2)
     parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
@@ -463,6 +500,8 @@ def main() -> int:
         dropout=args.dropout,
         adapter_rank=args.adapter_rank,
         feature_adapter=bool(args.feature_adapter),
+        feature_fusion=str(args.feature_fusion),
+        gate_rank=int(args.gate_rank),
         logprob_fusion=bool(args.logprob_fusion),
         logprob_fusion_init=float(args.logprob_fusion_init),
         ctm_readout=str(args.ctm_readout),
@@ -515,8 +554,8 @@ def main() -> int:
                     "args": vars(args),
                     "in_dim": in_dim,
                     "architecture": (
-                        f"yolo_head_residual_shared_ctm_{args.ctm_readout}_readout_"
-                        "lowrank_adapter_macro_f1_selected"
+                        f"yolo_head_{args.feature_fusion}_shared_ctm_{args.ctm_readout}_readout_"
+                        "feature_adapter_macro_f1_selected"
                         if args.feature_adapter
                         else f"yolo_head_residual_shared_ctm_{args.ctm_readout}_readout_macro_f1_selected"
                     ),
