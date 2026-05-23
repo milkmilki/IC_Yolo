@@ -1,0 +1,17 @@
+{
+  "round": 2,
+  "threadId": "llmreview-round2-wrapper-unexpected",
+  "status": "in_progress",
+  "difficulty": "medium",
+  "last_score": 5.0,
+  "last_verdict": "not ready",
+  "pending_experiments": [],
+  "last_completed_experiment": {
+    "run_dir": "runs/classify/autoresearch_yoloctm_token_spatial_gate_priorcal_20260523_094437",
+    "status": "discard",
+    "val_macro_f1": 0.8756208384935101,
+    "test_macro_f1": 0.8734163367607235,
+    "params_m": 10.527
+  },
+  "timestamp": "2026-05-23T10:15:00"
+}

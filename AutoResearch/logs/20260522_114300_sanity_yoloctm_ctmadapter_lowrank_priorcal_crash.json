@@ -1,0 +1,26 @@
+﻿{
+  "row": {
+    "timestamp": "2026-05-22T11:43:00",
+    "status": "crash",
+    "algorithm": "yoloctm",
+    "run_dir": "R:\\Cjn\\PCB_Yolo\\runs\\classify\\sanity_yoloctm_ctmadapter_lowrank_priorcal_20260522_114150",
+    "params_m": "",
+    "epochs": "1",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "0",
+    "model_summary": "yolo26m-cls.pt | ctm(d=96,s=4,drop=0.1,pow=0.5,adapter_rank=32)",
+    "val_acc": "",
+    "val_macro_p": "",
+    "val_macro_r": "",
+    "val_macro_f1": "",
+    "test_acc": "",
+    "test_macro_p": "",
+    "test_macro_r": "",
+    "test_macro_f1": "",
+    "description": "Sanity SSH connection reset before epoch 1 while building/loading model; no checkpoint or metrics written."
+  },
+  "error": "client_loop: send disconnect: Connection reset",
+  "diagnosis": "Foreground SSH session dropped and remote process was no longer running; pipeline.log stopped after runtime/model source logging before epoch 1.",
+  "run_dir": "R:\\Cjn\\PCB_Yolo\\runs\\classify\\sanity_yoloctm_ctmadapter_lowrank_priorcal_20260522_114150"
+}

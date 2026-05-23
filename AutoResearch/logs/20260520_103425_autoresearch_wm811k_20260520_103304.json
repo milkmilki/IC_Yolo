@@ -1,0 +1,92 @@
+{
+  "row": {
+    "timestamp": "2026-05-20T10:34:25",
+    "status": "crash",
+    "algorithm": "yoloctm",
+    "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_wm811k_20260520_103304",
+    "params_m": "",
+    "epochs": "10",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "0",
+    "model_summary": "yolo26m-cls.pt | ctm(d=256,s=4,drop=0.1,pow=0.5)",
+    "val_acc": "",
+    "val_macro_p": "",
+    "val_macro_r": "",
+    "val_macro_f1": "",
+    "test_acc": "",
+    "test_macro_p": "",
+    "test_macro_r": "",
+    "test_macro_f1": "",
+    "description": "Background relaunch exited before epoch 1; no checkpoint or metrics written"
+  },
+  "config": {
+    "dataset": {
+      "source": "data/MIR-WM811K",
+      "output": "data/wm811k_cls",
+      "image_size": 224,
+      "ratios": [
+        70,
+        15,
+        15
+      ],
+      "include_none": true,
+      "seed": 42,
+      "overwrite": false
+    },
+    "prepare": {
+      "enabled": false
+    },
+    "model": {
+      "algorithm": "yoloctm",
+      "config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "ctm": {
+        "d_model": 256,
+        "steps": 4,
+        "dropout": 0.1,
+        "class_weight_power": 0.5
+      }
+    },
+    "train": {
+      "epochs": 10,
+      "imgsz": 224,
+      "batch": 64,
+      "device": "0",
+      "workers": 8,
+      "patience": 20,
+      "project": "runs/classify",
+      "name": "autoresearch_wm811k",
+      "add_timestamp": true,
+      "exist_ok": true
+    },
+    "validate": {
+      "enabled": true,
+      "split": "val"
+    },
+    "test": {
+      "enabled": true,
+      "split": "test"
+    },
+    "metrics": {
+      "enabled": true,
+      "splits": [
+        "val",
+        "test"
+      ],
+      "batch": 128
+    },
+    "logging": {
+      "filename": "pipeline.log",
+      "autoresearch": true,
+      "description": "Fixed-budget YoloCTM baseline: yolo26m-cls backbone, d_model=256, steps=4"
+    }
+  },
+  "checkpoint_meta": {},
+  "checkpoint_path": "",
+  "reports": {
+    "val": {},
+    "test": {}
+  }
+}

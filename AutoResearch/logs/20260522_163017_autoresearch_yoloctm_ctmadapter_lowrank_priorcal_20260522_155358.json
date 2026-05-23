@@ -1,0 +1,135 @@
+{
+  "row": {
+    "timestamp": "2026-05-22T16:30:17",
+    "status": "discard",
+    "algorithm": "yoloctm",
+    "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_ctmadapter_lowrank_priorcal_20260522_155358",
+    "params_m": "10.496",
+    "epochs": "10",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "0",
+    "model_summary": "yolo26m-cls.pt | ctm(d=96,s=4,drop=0.1,pow=0.5)",
+    "val_acc": "0.9774128893000308",
+    "val_macro_p": "0.9082037651506413",
+    "val_macro_r": "0.8769646009356815",
+    "val_macro_f1": "0.8886174606520036",
+    "test_acc": "0.9772175320920551",
+    "test_macro_p": "0.9040333481559085",
+    "test_macro_r": "0.8584082098532324",
+    "test_macro_f1": "0.8779588274739122",
+    "description": "Low-rank CTM residual feature adapter (rank=32) before the YOLO head with fixed class-prior logit calibration tau=0.4"
+  },
+  "config": {
+    "dataset": {
+      "source": "data/MIR-WM811K",
+      "output": "data/wm811k_cls",
+      "image_size": 224,
+      "ratios": [
+        70,
+        15,
+        15
+      ],
+      "include_none": true,
+      "seed": 42,
+      "overwrite": false
+    },
+    "prepare": {
+      "enabled": false
+    },
+    "model": {
+      "algorithm": "yoloctm",
+      "config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "ctm": {
+        "d_model": 96,
+        "steps": 4,
+        "dropout": 0.1,
+        "class_weight_power": 0.5,
+        "adapter_rank": 32
+      }
+    },
+    "train": {
+      "epochs": 10,
+      "imgsz": 224,
+      "batch": 64,
+      "device": "0",
+      "workers": 0,
+      "patience": 20,
+      "project": "runs/classify",
+      "name": "autoresearch_yoloctm_ctmadapter_lowrank_priorcal",
+      "add_timestamp": true,
+      "exist_ok": true
+    },
+    "validate": {
+      "enabled": true,
+      "split": "val"
+    },
+    "test": {
+      "enabled": true,
+      "split": "test"
+    },
+    "metrics": {
+      "enabled": true,
+      "splits": [
+        "val",
+        "test"
+      ],
+      "batch": 128,
+      "prior_logit_tau": 0.4
+    },
+    "logging": {
+      "filename": "pipeline.log",
+      "autoresearch": true,
+      "description": "Low-rank CTM residual feature adapter (rank=32) before the YOLO head with fixed class-prior logit calibration tau=0.4"
+    }
+  },
+  "checkpoint_meta": {
+    "args": {
+      "data": "E:\\Cjn\\PCB_Yolo\\data\\wm811k_cls",
+      "model": null,
+      "model_config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "epochs": 10,
+      "batch": 64,
+      "imgsz": 224,
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "d_model": 96,
+      "steps": 4,
+      "dropout": 0.1,
+      "class_weight_power": 0.5,
+      "adapter_rank": 32,
+      "seed": 42,
+      "aux_loss_weight": 0.0,
+      "loss": "weighted_ce",
+      "workers": 0,
+      "device": "0",
+      "project": "E:\\Cjn\\PCB_Yolo\\runs\\classify",
+      "name": "autoresearch_yoloctm_ctmadapter_lowrank_priorcal_20260522_155358"
+    },
+    "weights": "yolo26m-cls.pt",
+    "d_model": 96,
+    "steps": 4,
+    "dropout": 0.1,
+    "class_weight_power": 0.5,
+    "params": 10495589
+  },
+  "checkpoint_path": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_ctmadapter_lowrank_priorcal_20260522_155358\\best_yoloctm.pt",
+  "reports": {
+    "val": {
+      "acc": 0.9774128893000308,
+      "macro_p": 0.9082037651506413,
+      "macro_r": 0.8769646009356815,
+      "macro_f1": 0.8886174606520036
+    },
+    "test": {
+      "acc": 0.9772175320920551,
+      "macro_p": 0.9040333481559085,
+      "macro_r": 0.8584082098532324,
+      "macro_f1": 0.8779588274739122
+    }
+  }
+}

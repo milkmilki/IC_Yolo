@@ -1,0 +1,129 @@
+{
+  "row": {
+    "timestamp": "2026-05-21T12:10:27",
+    "status": "discard",
+    "algorithm": "yoloctm",
+    "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_classscale_20260521_114310",
+    "params_m": "10.476",
+    "epochs": "10",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "0",
+    "model_summary": "yolo26m-cls.pt | ctm(d=96,s=4,drop=0.1,pow=0.5)",
+    "val_acc": "0.9742522355843355",
+    "val_macro_p": "0.8320768016403038",
+    "val_macro_r": "0.9214237994711163",
+    "val_macro_f1": "0.8706905775142163",
+    "test_acc": "0.9743263559616052",
+    "test_macro_p": "0.827111267793191",
+    "test_macro_r": "0.9096524444818395",
+    "test_macro_f1": "0.8620803522038738",
+    "description": "YOLO classification head plus CTM residual logits with class-wise residual scale, macro-F1 selected"
+  },
+  "config": {
+    "dataset": {
+      "source": "data/MIR-WM811K",
+      "output": "data/wm811k_cls",
+      "image_size": 224,
+      "ratios": [
+        70,
+        15,
+        15
+      ],
+      "include_none": true,
+      "seed": 42,
+      "overwrite": false
+    },
+    "prepare": {
+      "enabled": false
+    },
+    "model": {
+      "algorithm": "yoloctm",
+      "config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "ctm": {
+        "d_model": 96,
+        "steps": 4,
+        "dropout": 0.1,
+        "class_weight_power": 0.5
+      }
+    },
+    "train": {
+      "epochs": 10,
+      "imgsz": 224,
+      "batch": 64,
+      "device": "0",
+      "workers": 0,
+      "patience": 20,
+      "project": "runs/classify",
+      "name": "autoresearch_yoloctm_classscale",
+      "add_timestamp": true,
+      "exist_ok": true
+    },
+    "validate": {
+      "enabled": true,
+      "split": "val"
+    },
+    "test": {
+      "enabled": true,
+      "split": "test"
+    },
+    "metrics": {
+      "enabled": true,
+      "splits": [
+        "val",
+        "test"
+      ],
+      "batch": 128
+    },
+    "logging": {
+      "filename": "pipeline.log",
+      "autoresearch": true,
+      "description": "YOLO classification head plus CTM residual logits with class-wise residual scale, macro-F1 selected"
+    }
+  },
+  "checkpoint_meta": {
+    "args": {
+      "data": "E:\\Cjn\\PCB_Yolo\\data\\wm811k_cls",
+      "model": null,
+      "model_config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "epochs": 10,
+      "batch": 64,
+      "imgsz": 224,
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "d_model": 96,
+      "steps": 4,
+      "dropout": 0.1,
+      "class_weight_power": 0.5,
+      "workers": 0,
+      "device": "0",
+      "project": "E:\\Cjn\\PCB_Yolo\\runs\\classify",
+      "name": "autoresearch_yoloctm_classscale_20260521_114310"
+    },
+    "weights": "yolo26m-cls.pt",
+    "d_model": 96,
+    "steps": 4,
+    "dropout": 0.1,
+    "class_weight_power": 0.5,
+    "params": 10475628
+  },
+  "checkpoint_path": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_classscale_20260521_114310\\best_yoloctm.pt",
+  "reports": {
+    "val": {
+      "acc": 0.9742522355843355,
+      "macro_p": 0.8320768016403038,
+      "macro_r": 0.9214237994711163,
+      "macro_f1": 0.8706905775142163
+    },
+    "test": {
+      "acc": 0.9743263559616052,
+      "macro_p": 0.827111267793191,
+      "macro_r": 0.9096524444818395,
+      "macro_f1": 0.8620803522038738
+    }
+  }
+}

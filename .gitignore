@@ -22,3 +22,12 @@ datasets/pku_market_pcb/
 *.onnx
 *.engine
 *.cache
+
+# Local agent/ARIS runtime state and scratch files
+.aris/
+.claude/
+.tmp_*
+
+# Keep JSON experiment summaries, but ignore transient launcher/stdout logs
+AutoResearch/logs/*.log
+AutoResearch/logs/*.txt

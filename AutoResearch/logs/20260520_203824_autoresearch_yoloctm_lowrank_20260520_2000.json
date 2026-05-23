@@ -1,0 +1,67 @@
+{
+  "row": {
+    "timestamp": "2026-05-20T20:38:24",
+    "status": "discard",
+    "algorithm": "yoloctm",
+    "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_lowrank_20260520_2000",
+    "params_m": "9.901",
+    "epochs": "10",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "0",
+    "model_summary": "yolo26m-cls.pt | ctm(d=64,s=4,drop=0.1,pow=0.5)",
+    "val_acc": "0.9715155720012334",
+    "val_macro_p": "0.8371713941671072",
+    "val_macro_r": "0.8859188113986363",
+    "val_macro_f1": "0.848025629982892",
+    "test_acc": "0.9732084345244979",
+    "test_macro_p": "0.8453848005388387",
+    "test_macro_r": "0.888824906429604",
+    "test_macro_f1": "0.8558066844950182",
+    "description": "Low-rank YOLO head with shared CTM residual logits, d_model=64, steps=4"
+  },
+  "config": {},
+  "checkpoint_meta": {
+    "args": {
+      "data": "data\\wm811k_cls",
+      "model": null,
+      "model_config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "epochs": 10,
+      "batch": 64,
+      "imgsz": 224,
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "d_model": 64,
+      "steps": 4,
+      "dropout": 0.1,
+      "class_weight_power": 0.5,
+      "workers": 0,
+      "device": "0",
+      "project": "runs\\classify",
+      "name": "autoresearch_yoloctm_lowrank_20260520_2000"
+    },
+    "weights": "yolo26m-cls.pt",
+    "d_model": 64,
+    "steps": 4,
+    "dropout": 0.1,
+    "class_weight_power": 0.5,
+    "params": 9900612
+  },
+  "checkpoint_path": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_lowrank_20260520_2000\\best_yoloctm.pt",
+  "reports": {
+    "val": {
+      "acc": 0.9715155720012334,
+      "macro_p": 0.8371713941671072,
+      "macro_r": 0.8859188113986363,
+      "macro_f1": 0.848025629982892
+    },
+    "test": {
+      "acc": 0.9732084345244979,
+      "macro_p": 0.8453848005388387,
+      "macro_r": 0.888824906429604,
+      "macro_f1": 0.8558066844950182
+    }
+  }
+}
