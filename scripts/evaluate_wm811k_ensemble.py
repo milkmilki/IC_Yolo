@@ -79,6 +79,8 @@ def yolo_log_probs(
     batch: int,
     imgsz: int,
     device: str,
+    progress_label: str | None = None,
+    progress_every: int = 50,
 ) -> np.ndarray:
     from ultralytics import YOLO
 
@@ -88,15 +90,33 @@ def yolo_log_probs(
     reorder = [model_classes.index(class_name) for class_name in classes]
 
     chunks: list[np.ndarray] = []
+    total_batches = (len(image_paths) + batch - 1) // batch
     for start in range(0, len(image_paths), batch):
         batch_paths = [str(path) for path in image_paths[start : start + batch]]
         results = model.predict(batch_paths, imgsz=imgsz, device=device, verbose=False)
         probs = np.stack([result.probs.data.detach().cpu().numpy()[reorder] for result in results], axis=0)
         chunks.append(np.log(np.clip(probs, EPS, 1.0)))
+        batch_index = start // batch + 1
+        if progress_label and (batch_index == 1 or batch_index == total_batches or batch_index % progress_every == 0):
+            done = min(start + batch, len(image_paths))
+            print(
+                f"[teacher:{progress_label}] batch {batch_index}/{total_batches} images={done}/{len(image_paths)}",
+                flush=True,
+            )
     return np.concatenate(chunks, axis=0)
 
 
-def ctm_log_probs(checkpoint: Path, data_root: Path, split: str, classes: list[str], batch: int, imgsz: int, device_arg: str) -> np.ndarray:
+def ctm_log_probs(
+    checkpoint: Path,
+    data_root: Path,
+    split: str,
+    classes: list[str],
+    batch: int,
+    imgsz: int,
+    device_arg: str,
+    progress_label: str | None = None,
+    progress_every: int = 50,
+) -> np.ndarray:
     dataset = datasets.ImageFolder(data_root / split, transform=build_transform(imgsz))
     if list(dataset.classes) != list(classes):
         raise ValueError(f"Dataset classes do not match: {dataset.classes} != {classes}")
@@ -106,10 +126,19 @@ def ctm_log_probs(checkpoint: Path, data_root: Path, split: str, classes: list[s
         raise ValueError(f"Checkpoint classes do not match: {checkpoint_classes} != {classes}")
 
     chunks: list[np.ndarray] = []
+    total_batches = len(loader)
     with torch.no_grad():
-        for images, _labels in loader:
+        for batch_index, (images, _labels) in enumerate(loader, start=1):
             logits = model(images.to(device))
             chunks.append(torch.log_softmax(logits, dim=1).cpu().numpy())
+            if progress_label and (
+                batch_index == 1 or batch_index == total_batches or batch_index % progress_every == 0
+            ):
+                done = min(batch_index * batch, len(dataset))
+                print(
+                    f"[teacher:{progress_label}] batch {batch_index}/{total_batches} images={done}/{len(dataset)}",
+                    flush=True,
+                )
     return np.concatenate(chunks, axis=0)
 
 
