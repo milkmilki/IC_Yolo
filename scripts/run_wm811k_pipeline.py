@@ -287,6 +287,8 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         str(ctm_config.get("feature_fusion", "residual")),
         "--gate-rank",
         str(ctm_config.get("gate_rank", 16)),
+        "--token-gate-rank",
+        str(ctm_config.get("token_gate_rank", 16)),
         "--logprob-fusion" if bool(ctm_config.get("logprob_fusion", False)) else "--no-logprob-fusion",
         "--logprob-fusion-init",
         str(ctm_config.get("logprob_fusion_init", 0.2)),
@@ -372,6 +374,14 @@ def load_yoloctm_checkpoint(checkpoint: Path, device: str):
         key == "feature_adapter_scale" or key.startswith("feature_adapter.") for key in model_state
     )
     feature_adapter = bool(args.get("feature_adapter", has_feature_adapter))
+    feature_fusion = str(args.get("feature_fusion", "residual"))
+    has_token_gate = any(key.startswith("token_gate.") for key in model_state)
+    if feature_fusion == "token" and "token_gate_rank" not in args:
+        token_gate_0 = model_state.get("token_gate.0.weight")
+        if hasattr(token_gate_0, "shape") and len(token_gate_0.shape) >= 1:
+            args["token_gate_rank"] = int(token_gate_0.shape[0])
+    if has_token_gate:
+        feature_fusion = "token"
     model = YoloCTM(
         backbone=backbone,
         yolo_head=yolo_head,
@@ -382,8 +392,9 @@ def load_yoloctm_checkpoint(checkpoint: Path, device: str):
         dropout=float(args.get("dropout", 0.1)),
         adapter_rank=int(args.get("adapter_rank", 0)),
         feature_adapter=feature_adapter,
-        feature_fusion=str(args.get("feature_fusion", "residual")),
+        feature_fusion=feature_fusion,
         gate_rank=int(args.get("gate_rank", 16)),
+        token_gate_rank=int(args.get("token_gate_rank", 16)),
         logprob_fusion=bool(args.get("logprob_fusion", False)),
         logprob_fusion_init=float(args.get("logprob_fusion_init", 0.2)),
         ctm_readout=str(args.get("ctm_readout", "mean")),

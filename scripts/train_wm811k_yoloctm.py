@@ -99,6 +99,7 @@ class YoloCTM(nn.Module):
         feature_adapter: bool = True,
         feature_fusion: str = "residual",
         gate_rank: int = 16,
+        token_gate_rank: int = 16,
         logprob_fusion: bool = False,
         logprob_fusion_init: float = 0.2,
         ctm_readout: str = "mean",
@@ -125,11 +126,12 @@ class YoloCTM(nn.Module):
             self.ctm_scale = nn.Parameter(torch.tensor(0.1))
         self.feature_adapter_enabled = bool(feature_adapter)
         self.feature_fusion = str(feature_fusion).lower()
-        if self.feature_fusion not in {"residual", "gated"}:
-            raise ValueError("feature_fusion must be one of: residual, gated")
-        if self.feature_fusion == "gated" and not self.feature_adapter_enabled:
-            raise ValueError("feature_fusion='gated' requires feature_adapter=True")
+        if self.feature_fusion not in {"residual", "gated", "token"}:
+            raise ValueError("feature_fusion must be one of: residual, gated, token")
+        if self.feature_fusion in {"gated", "token"} and not self.feature_adapter_enabled:
+            raise ValueError("feature_fusion='gated' or 'token' requires feature_adapter=True")
         self.gate_rank = max(1, int(gate_rank))
+        self.token_gate_rank = max(1, int(token_gate_rank))
         self.adapter_rank = int(adapter_rank)
         if self.feature_adapter_enabled and self.adapter_rank > 0:
             self.feature_adapter = nn.Sequential(
@@ -146,6 +148,7 @@ class YoloCTM(nn.Module):
         else:
             self.feature_adapter = None
         self.feature_gate = None
+        self.token_gate = None
         if self.feature_adapter_enabled:
             self.feature_adapter_scale = nn.Parameter(torch.tensor(0.05))
             if self.feature_fusion == "gated":
@@ -156,6 +159,14 @@ class YoloCTM(nn.Module):
                 )
                 nn.init.zeros_(self.feature_gate[-1].weight)
                 nn.init.zeros_(self.feature_gate[-1].bias)
+            elif self.feature_fusion == "token":
+                self.token_gate = nn.Sequential(
+                    nn.Linear(d_model, self.token_gate_rank, bias=False),
+                    nn.SiLU(),
+                    nn.Linear(self.token_gate_rank, 1),
+                )
+                nn.init.zeros_(self.token_gate[-1].weight)
+                nn.init.zeros_(self.token_gate[-1].bias)
 
     @staticmethod
     def _as_logits(output: torch.Tensor | tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
@@ -218,11 +229,17 @@ class YoloCTM(nn.Module):
             if self.feature_fusion == "gated" and self.feature_gate is not None:
                 gate = self._feature_gate(feats, residual)
                 return feats + self.feature_adapter_scale * gate * residual
+            if self.feature_fusion == "token" and self.token_gate is not None:
+                gate = self._token_gate(state, height, width)
+                return feats + self.feature_adapter_scale * gate * residual
             return feats + self.feature_adapter_scale * residual
         if feats.ndim == 2:
             residual = residual.squeeze(1)
             if self.feature_fusion == "gated" and self.feature_gate is not None:
                 gate = self._feature_gate(feats, residual)
+                return feats + self.feature_adapter_scale * gate * residual
+            if self.feature_fusion == "token" and self.token_gate is not None:
+                gate = torch.sigmoid(self.token_gate(state)).squeeze(-1)
                 return feats + self.feature_adapter_scale * gate * residual
             return feats + self.feature_adapter_scale * residual
         return feats
@@ -237,6 +254,12 @@ class YoloCTM(nn.Module):
             return gate.view(feats.shape[0], -1, 1, 1)
         gate = torch.sigmoid(self.feature_gate(torch.cat([feats, residual], dim=1)))
         return gate
+
+    def _token_gate(self, state: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        if self.token_gate is None:
+            raise RuntimeError("token_gate is not initialized")
+        gate = torch.sigmoid(self.token_gate(state))
+        return gate.transpose(1, 2).reshape(state.shape[0], 1, height, width)
 
 
 def reset_classification_head(head: nn.Module, num_classes: int) -> None:
@@ -375,8 +398,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--class-weight-power", type=float, default=0.5)
     parser.add_argument("--adapter-rank", type=int, default=0)
     parser.add_argument("--feature-adapter", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--feature-fusion", choices=["residual", "gated"], default="residual")
+    parser.add_argument("--feature-fusion", choices=["residual", "gated", "token"], default="residual")
     parser.add_argument("--gate-rank", type=int, default=16)
+    parser.add_argument("--token-gate-rank", type=int, default=16)
     parser.add_argument("--logprob-fusion", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logprob-fusion-init", type=float, default=0.2)
     parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
@@ -502,6 +526,7 @@ def main() -> int:
         feature_adapter=bool(args.feature_adapter),
         feature_fusion=str(args.feature_fusion),
         gate_rank=int(args.gate_rank),
+        token_gate_rank=int(args.token_gate_rank),
         logprob_fusion=bool(args.logprob_fusion),
         logprob_fusion_init=float(args.logprob_fusion_init),
         ctm_readout=str(args.ctm_readout),

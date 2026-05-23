@@ -79,6 +79,7 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
     weights = model_cfg.get("weights") or checkpoint_meta.get("weights") or checkpoint_name
     feature_fusion = ctm_cfg.get("feature_fusion") or checkpoint_meta.get("feature_fusion")
     gate_rank = ctm_cfg.get("gate_rank") or checkpoint_meta.get("gate_rank")
+    token_gate_rank = ctm_cfg.get("token_gate_rank") or checkpoint_meta.get("token_gate_rank")
 
     if algorithm == "yoloctm":
         summary = (
@@ -93,6 +94,8 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
             summary += f" | fusion={feature_fusion}"
         if feature_fusion == "gated":
             summary += f"(rank={gate_rank})"
+        elif feature_fusion == "token":
+            summary += f"(rank={token_gate_rank})"
         return summary
     return str(weights)
 
@@ -129,6 +132,7 @@ def load_checkpoint_meta(run_dir: Path) -> tuple[dict[str, Any], Path | None, st
             "class_weight_power": args.get("class_weight_power"),
             "feature_fusion": args.get("feature_fusion"),
             "gate_rank": args.get("gate_rank"),
+            "token_gate_rank": args.get("token_gate_rank"),
             "params": sum(t.numel() for t in saved.get("model_state", {}).values() if hasattr(t, "numel")),
         }
         return meta, checkpoint, "yoloctm"
