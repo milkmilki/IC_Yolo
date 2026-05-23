@@ -83,6 +83,7 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
     logit_bias = ctm_cfg.get("logit_bias") if "logit_bias" in ctm_cfg else checkpoint_meta.get("logit_bias")
     logit_bias_init = ctm_cfg.get("logit_bias_init") or checkpoint_meta.get("logit_bias_init")
     logit_bias_tau = ctm_cfg.get("logit_bias_prior_tau") or checkpoint_meta.get("logit_bias_prior_tau")
+    anchor_loss_weight = ctm_cfg.get("anchor_loss_weight") or checkpoint_meta.get("anchor_loss_weight")
 
     if algorithm == "yoloctm":
         summary = (
@@ -103,6 +104,8 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
             summary += f" | logit_bias={logit_bias_init or 'learned'}"
             if logit_bias_tau is not None:
                 summary += f"(tau={logit_bias_tau})"
+        if anchor_loss_weight:
+            summary += f" | anchor_kl={anchor_loss_weight}"
         return summary
     return str(weights)
 
@@ -143,6 +146,7 @@ def load_checkpoint_meta(run_dir: Path) -> tuple[dict[str, Any], Path | None, st
             "logit_bias": args.get("logit_bias"),
             "logit_bias_init": args.get("logit_bias_init"),
             "logit_bias_prior_tau": args.get("logit_bias_prior_tau"),
+            "anchor_loss_weight": args.get("anchor_loss_weight"),
             "params": sum(t.numel() for t in saved.get("model_state", {}).values() if hasattr(t, "numel")),
         }
         return meta, checkpoint, "yoloctm"

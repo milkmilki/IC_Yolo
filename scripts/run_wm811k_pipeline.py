@@ -303,6 +303,8 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         str(train_config.get("seed", dataset_config.get("seed", 42))),
         "--aux-loss-weight",
         str(ctm_config.get("aux_loss_weight", 0.0)),
+        "--anchor-loss-weight",
+        str(ctm_config.get("anchor_loss_weight", 0.0)),
         "--loss",
         str(ctm_config.get("loss", "weighted_ce")),
         "--workers",

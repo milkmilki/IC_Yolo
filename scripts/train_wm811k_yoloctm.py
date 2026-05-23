@@ -186,7 +186,12 @@ class YoloCTM(nn.Module):
             return output[1]
         return output
 
-    def forward(self, images: torch.Tensor, return_aux: bool = False) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        images: torch.Tensor,
+        return_aux: bool = False,
+        return_clean: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, ...]:
         feats = self.backbone(images)
         if feats.ndim == 2:
             tokens = feats.unsqueeze(1)
@@ -200,6 +205,7 @@ class YoloCTM(nn.Module):
 
         state = self.norm(state)
         pooled = self._pool_ctm_state(state)
+        clean_yolo_logits = self._as_logits(self.yolo_head(feats)) if return_clean else None
         fused_feats = self._apply_feature_adapter(feats, state)
         yolo_logits = self._as_logits(self.yolo_head(fused_feats))
         ctm_logits = self.ctm_cls(pooled)
@@ -221,8 +227,16 @@ class YoloCTM(nn.Module):
             logits = yolo_logits + self.ctm_scale * ctm_logits
         if self.logit_bias is not None:
             logits = logits + self.logit_bias.view(1, -1)
+        if return_aux and return_clean:
+            if clean_yolo_logits is None:
+                raise RuntimeError("clean_yolo_logits was not computed")
+            return logits, ctm_logits, clean_yolo_logits
         if return_aux:
             return logits, ctm_logits
+        if return_clean:
+            if clean_yolo_logits is None:
+                raise RuntimeError("clean_yolo_logits was not computed")
+            return logits, clean_yolo_logits
         return logits
 
     def _pool_ctm_state(self, state: torch.Tensor) -> torch.Tensor:
@@ -423,12 +437,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--logit-bias-prior-tau", type=float, default=0.4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--aux-loss-weight", type=float, default=0.0)
+    parser.add_argument("--anchor-loss-weight", type=float, default=0.0)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax"], default="weighted_ce")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--device", default="0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--project", default="runs/classify")
     parser.add_argument("--name", default="wm811k_yoloctm")
     return parser.parse_args()
+
+
+def anchor_kl_loss(fused_logits: torch.Tensor, clean_logits: torch.Tensor) -> torch.Tensor:
+    teacher_probs = F.softmax(clean_logits.detach(), dim=1)
+    return F.kl_div(F.log_softmax(fused_logits, dim=1), teacher_probs, reduction="batchmean")
 
 
 def train_one_epoch(
@@ -438,6 +458,7 @@ def train_one_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     aux_loss_weight: float = 0.0,
+    anchor_loss_weight: float = 0.0,
 ) -> tuple[float, float]:
     model.train()
     total_loss = 0.0
@@ -446,9 +467,19 @@ def train_one_epoch(
     for images, labels in loader:
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad(set_to_none=True)
-        if aux_loss_weight > 0:
+        if aux_loss_weight > 0 and anchor_loss_weight > 0:
+            logits, ctm_logits, clean_logits = model(images, return_aux=True, return_clean=True)
+            loss = (
+                criterion(logits, labels)
+                + aux_loss_weight * criterion(ctm_logits, labels)
+                + anchor_loss_weight * anchor_kl_loss(logits, clean_logits)
+            )
+        elif aux_loss_weight > 0:
             logits, ctm_logits = model(images, return_aux=True)
             loss = criterion(logits, labels) + aux_loss_weight * criterion(ctm_logits, labels)
+        elif anchor_loss_weight > 0:
+            logits, clean_logits = model(images, return_clean=True)
+            loss = criterion(logits, labels) + anchor_loss_weight * anchor_kl_loss(logits, clean_logits)
         else:
             logits = model(images)
             loss = criterion(logits, labels)
@@ -578,6 +609,7 @@ def main() -> int:
             optimizer,
             device,
             aux_loss_weight=float(args.aux_loss_weight),
+            anchor_loss_weight=float(args.anchor_loss_weight),
         )
         val_loss, val_acc, val_macro_f1 = evaluate(model, val_loader, criterion, device)
         history.append({
