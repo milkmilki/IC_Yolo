@@ -310,6 +310,7 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         str(ctm_config.get("expert_fusion", "none")),
         "--expert-ctm-init",
         str(ctm_config.get("expert_ctm_init", 0.4)),
+        "--freeze-yolo-anchor" if bool(ctm_config.get("freeze_yolo_anchor", False)) else "--no-freeze-yolo-anchor",
         "--ctm-readout",
         str(ctm_config.get("readout", "mean")),
         "--logit-bias" if bool(ctm_config.get("logit_bias", False)) else "--no-logit-bias",

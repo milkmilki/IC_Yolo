@@ -3,10 +3,10 @@
 This file records the practical runbook learned from the latest WM811K AutoResearch runs.
 Keep it short and operational.
 
-## Local development-host execution
+## Remote development-host execution
 
-- The user will connect to the development machine and open a terminal there for training.
-- Do not launch training by wrapping commands through SSH from the mounted network-drive view.
+- As of 2026-05-25, the user explicitly authorized the agent to start subsequent experiment cycles remotely instead of asking the user to execute commands.
+- Use SSH to the development machine (`du@10.129.136.178`) and execute against its local project path; do not run GPU training against the mounted `R:` drive path.
 - Treat the project as local on the development machine:
   - `E:\Cjn\PCB_Yolo`
 - Prefer the project Python explicitly:
@@ -14,12 +14,11 @@ Keep it short and operational.
 - If working from `cmd`, use `cd /d E:\Cjn\PCB_Yolo`.
 - If working from PowerShell, use `Set-Location E:\Cjn\PCB_Yolo`.
 
-## Stable foreground launch
+## Stable launch
 
-- For WM811K AutoResearch training, run this directly inside a terminal on the development machine:
-  - `cd /d E:\Cjn\PCB_Yolo && D:\anaconda3\envs\pcb_yolo\python.exe scripts\run_wm811k_pipeline.py --config AutoResearch\configs\wm811k_autoresearch.yaml`
-- Prefer a visible foreground terminal for long GPU training so progress and interruptions are obvious.
-- Avoid `Start-Process` background launches unless the user explicitly asks for detached training.
+- For an agent-held run, a direct SSH foreground command with an adequate timeout is acceptable and easiest to audit.
+- If detaching a run, use remote `Start-Process` only with explicit redirected launcher output and immediately verify the newly created `pipeline.log`; do not use scheduled tasks.
+- Because GPU evaluation triggered a BSOD after a completed train, run GPU training with `--skip-val --skip-test --skip-metrics`, then resume metrics on CPU in the same run directory.
 - Avoid Windows scheduled tasks for this training loop unless there is no foreground option. They repeatedly exited early with status `-1073741510` or re-fired unexpectedly.
 - If the user interrupts the foreground terminal, always check local process state and `pipeline.log` before restarting.
 

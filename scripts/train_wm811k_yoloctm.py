@@ -504,6 +504,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--logprob-fusion-init", type=float, default=0.2)
     parser.add_argument("--expert-fusion", choices=["none", "classwise_logprob"], default="none")
     parser.add_argument("--expert-ctm-init", type=float, default=0.4)
+    parser.add_argument("--freeze-yolo-anchor", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
     parser.add_argument("--logit-bias", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logit-bias-init", choices=["zero", "prior"], default="zero")
@@ -798,6 +799,12 @@ def main() -> int:
         logit_bias=bool(args.logit_bias),
         logit_bias_init=logit_bias_init,
     ).to(device)
+    if bool(args.freeze_yolo_anchor):
+        for parameter in model.backbone.parameters():
+            parameter.requires_grad_(False)
+        for parameter in model.yolo_head.parameters():
+            parameter.requires_grad_(False)
+        print("[anchor] frozen YOLO backbone and classification head; training CTM residual correction only")
 
     if args.loss == "balanced_softmax":
         criterion = BalancedSoftmaxLoss(class_counts).to(device)
@@ -805,7 +812,11 @@ def main() -> int:
         class_weights = (class_counts.sum() / class_counts.clamp(min=1.0)).pow(args.class_weight_power)
         class_weights = (class_weights / class_weights.mean()).to(device)
         criterion = nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(
+        [parameter for parameter in model.parameters() if parameter.requires_grad],
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+    )
     distill_logprobs = None
     if args.distill_logprobs is not None and float(args.distill_weight) > 0:
         distill_logprobs = load_distill_logprobs(args.distill_logprobs, train_ds)
