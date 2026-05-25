@@ -16,9 +16,10 @@ Keep it short and operational.
 
 ## Stable launch
 
-- For an agent-held run, a direct SSH foreground command with an adequate timeout is acceptable and easiest to audit.
-- If detaching a run, use remote `Start-Process` only with explicit redirected launcher output and immediately verify the newly created `pipeline.log`; do not use scheduled tasks.
+- For an agent-held run, use a direct SSH foreground command with an adequate timeout and keep that session alive until the GPU phase completes.
+- A remote `Start-Process` test on 2026-05-25 created the run directory but exited before runtime/epoch output as soon as the launching session ended. Treat detached `Start-Process` as unreliable for this loop; do not use it for training.
 - Because GPU evaluation triggered a BSOD after a completed train, run GPU training with `--skip-val --skip-test --skip-metrics`, then resume metrics on CPU in the same run directory.
+- A direct SSH foreground GPU phase held open by the agent completed successfully on 2026-05-25 at a `400 W` power limit; use this method for subsequent runs and perform the CPU resume step afterward.
 - Avoid Windows scheduled tasks for this training loop unless there is no foreground option. They repeatedly exited early with status `-1073741510` or re-fired unexpectedly.
 - If the user interrupts the foreground terminal, always check local process state and `pipeline.log` before restarting.
 

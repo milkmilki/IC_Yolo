@@ -153,6 +153,8 @@ class YoloCTM(nn.Module):
         logprob_fusion_init: float = 0.2,
         expert_fusion: str = "none",
         expert_ctm_init: float = 0.4,
+        spatial_encoding: str = "none",
+        spatial_encoding_scale_init: float = 0.05,
         ctm_readout: str = "mean",
         logit_bias: bool = False,
         logit_bias_init: torch.Tensor | None = None,
@@ -161,6 +163,15 @@ class YoloCTM(nn.Module):
         self.backbone = backbone
         self.yolo_head = yolo_head
         self.token_proj = nn.Linear(in_dim, d_model)
+        self.spatial_encoding = str(spatial_encoding).lower()
+        if self.spatial_encoding not in {"none", "polar"}:
+            raise ValueError("spatial_encoding must be one of: none, polar")
+        if self.spatial_encoding == "polar":
+            self.spatial_proj = nn.Linear(3, d_model, bias=False)
+            self.spatial_scale = nn.Parameter(torch.tensor(float(spatial_encoding_scale_init)))
+        else:
+            self.spatial_proj = None
+            self.spatial_scale = None
         self.ctm_block = CTMBlock(d_model=d_model, dropout=dropout)
         self.steps = steps
         self.norm = nn.LayerNorm(d_model)
@@ -259,6 +270,11 @@ class YoloCTM(nn.Module):
             tokens = feats.flatten(2).transpose(1, 2)
 
         inputs = self.token_proj(tokens)
+        if self.spatial_encoding == "polar" and feats.ndim == 4:
+            if self.spatial_proj is None or self.spatial_scale is None:
+                raise RuntimeError("Polar spatial encoding parameters are not initialized")
+            coords = self._polar_coordinates(feats.shape[-2], feats.shape[-1], inputs.device, inputs.dtype)
+            inputs = inputs + self.spatial_scale * self.spatial_proj(coords).unsqueeze(0)
         state = torch.zeros_like(inputs)
         for _ in range(self.steps):
             state = self.ctm_block(state, inputs)
@@ -317,6 +333,14 @@ class YoloCTM(nn.Module):
         scores = (state * query).sum(dim=-1) / float(state.shape[-1]) ** 0.5
         weights = torch.softmax(scores, dim=1).unsqueeze(-1)
         return (state * weights).sum(dim=1)
+
+    @staticmethod
+    def _polar_coordinates(height: int, width: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        y = torch.linspace(-1.0, 1.0, height, device=device, dtype=dtype)
+        x = torch.linspace(-1.0, 1.0, width, device=device, dtype=dtype)
+        yy, xx = torch.meshgrid(y, x, indexing="ij")
+        radius = torch.sqrt(xx.square() + yy.square()) / (2.0**0.5)
+        return torch.stack([xx, yy, radius], dim=-1).reshape(-1, 3)
 
     def _apply_feature_adapter(self, feats: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         if not self.feature_adapter_enabled or self.feature_adapter is None:
@@ -505,6 +529,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expert-fusion", choices=["none", "classwise_logprob"], default="none")
     parser.add_argument("--expert-ctm-init", type=float, default=0.4)
     parser.add_argument("--freeze-yolo-anchor", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--spatial-encoding", choices=["none", "polar"], default="none")
+    parser.add_argument("--spatial-encoding-scale-init", type=float, default=0.05)
     parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
     parser.add_argument("--logit-bias", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logit-bias-init", choices=["zero", "prior"], default="zero")
@@ -795,6 +821,8 @@ def main() -> int:
         logprob_fusion_init=float(args.logprob_fusion_init),
         expert_fusion=str(args.expert_fusion),
         expert_ctm_init=float(args.expert_ctm_init),
+        spatial_encoding=str(args.spatial_encoding),
+        spatial_encoding_scale_init=float(args.spatial_encoding_scale_init),
         ctm_readout=str(args.ctm_readout),
         logit_bias=bool(args.logit_bias),
         logit_bias_init=logit_bias_init,
