@@ -1,0 +1,200 @@
+{
+  "row": {
+    "timestamp": "2026-05-25T16:57:39",
+    "status": "discard",
+    "algorithm": "yoloctm",
+    "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_ntzscore_distill_priorcal_20260525_161009",
+    "params_m": "10.525",
+    "epochs": "10",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "0",
+    "model_summary": "yolo26m-cls.pt | ctm(d=96,s=4,drop=0.1,pow=0.5) | fusion=residual | distill(w=0.25,T=2.0)[nontarget_zscore]",
+    "val_acc": "0.971399938328708",
+    "val_macro_p": "0.8899937726068708",
+    "val_macro_r": "0.8182965460725992",
+    "val_macro_f1": "0.8439150773496082",
+    "test_acc": "0.9730927874792799",
+    "test_macro_p": "0.8877301964584503",
+    "test_macro_r": "0.8119078147703201",
+    "test_macro_f1": "0.8376383299547944",
+    "description": "CTM residual feature adapter with ensemble non-target logit-standardized distillation (w=0.25,T=2.0) and validation-selected class-prior logit calibration; collapsed minority recall and underperformed the baseline and best CTM adapter by a wide margin"
+  },
+  "config": {
+    "dataset": {
+      "source": "data/MIR-WM811K",
+      "output": "data/wm811k_cls",
+      "image_size": 224,
+      "ratios": [
+        70,
+        15,
+        15
+      ],
+      "include_none": true,
+      "seed": 42,
+      "overwrite": false
+    },
+    "prepare": {
+      "enabled": false
+    },
+    "model": {
+      "algorithm": "yoloctm",
+      "config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "ctm": {
+        "d_model": 96,
+        "steps": 4,
+        "dropout": 0.1,
+        "class_weight_power": 0.5,
+        "adapter_rank": 0,
+        "feature_adapter": true,
+        "feature_fusion": "residual",
+        "gate_rank": 16,
+        "token_gate_rank": 16,
+        "logit_bias": false,
+        "logit_bias_init": "zero",
+        "logit_bias_prior_tau": 0.4,
+        "anchor_loss_weight": 0.0,
+        "distill_logprobs": "AutoResearch/cache/train_logprob_ensemble_060202_tau0025.npz",
+        "distill_weight": 0.25,
+        "distill_temperature": 2.0,
+        "distill_mode": "nontarget_zscore",
+        "classifier_cbr_weight": 0.0,
+        "classifier_cbr_power": 1.0,
+        "classifier_cbr_start_epoch": 1,
+        "logprob_fusion": false,
+        "logprob_fusion_init": 0.2,
+        "readout": "mean"
+      }
+    },
+    "train": {
+      "epochs": 10,
+      "imgsz": 224,
+      "batch": 64,
+      "device": "0",
+      "workers": 0,
+      "sampling": "natural",
+      "none_sampling_ratio": 0.75,
+      "sampling_start_epoch": 1,
+      "patience": 20,
+      "project": "runs/classify",
+      "name": "autoresearch_yoloctm_ntzscore_distill_priorcal",
+      "add_timestamp": true,
+      "exist_ok": true
+    },
+    "validate": {
+      "enabled": true,
+      "split": "val"
+    },
+    "test": {
+      "enabled": true,
+      "split": "test"
+    },
+    "metrics": {
+      "enabled": true,
+      "splits": [
+        "val",
+        "test"
+      ],
+      "batch": 128,
+      "prior_logit_tau": "auto",
+      "prior_logit_tau_candidates": [
+        0.3,
+        0.4,
+        0.5,
+        0.6,
+        0.7
+      ]
+    },
+    "logging": {
+      "filename": "pipeline.log",
+      "autoresearch": true,
+      "description": "CTM residual feature adapter with ensemble non-target logit-standardized distillation (w=0.25,T=2.0) and validation-selected class-prior logit calibration"
+    }
+  },
+  "checkpoint_meta": {
+    "args": {
+      "data": "E:\\Cjn\\PCB_Yolo\\data\\wm811k_cls",
+      "model": null,
+      "model_config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "epochs": 10,
+      "batch": 64,
+      "imgsz": 224,
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "d_model": 96,
+      "steps": 4,
+      "dropout": 0.1,
+      "class_weight_power": 0.5,
+      "adapter_rank": 0,
+      "feature_adapter": true,
+      "feature_fusion": "residual",
+      "gate_rank": 16,
+      "token_gate_rank": 16,
+      "logprob_fusion": false,
+      "logprob_fusion_init": 0.2,
+      "ctm_readout": "mean",
+      "logit_bias": false,
+      "logit_bias_init": "zero",
+      "logit_bias_prior_tau": 0.4,
+      "seed": 42,
+      "aux_loss_weight": 0.0,
+      "anchor_loss_weight": 0.0,
+      "distill_logprobs": "E:\\Cjn\\PCB_Yolo\\AutoResearch\\cache\\train_logprob_ensemble_060202_tau0025.npz",
+      "distill_weight": 0.25,
+      "distill_temperature": 2.0,
+      "distill_mode": "nontarget_zscore",
+      "classifier_cbr_weight": 0.0,
+      "classifier_cbr_power": 1.0,
+      "classifier_cbr_start_epoch": 1,
+      "loss": "weighted_ce",
+      "train_sampling": "natural",
+      "none_sampling_ratio": 0.75,
+      "train_sampling_start_epoch": 1,
+      "workers": 0,
+      "device": "0",
+      "project": "E:\\Cjn\\PCB_Yolo\\runs\\classify",
+      "name": "autoresearch_yoloctm_ntzscore_distill_priorcal_20260525_161009"
+    },
+    "weights": "yolo26m-cls.pt",
+    "d_model": 96,
+    "steps": 4,
+    "dropout": 0.1,
+    "class_weight_power": 0.5,
+    "feature_fusion": "residual",
+    "gate_rank": 16,
+    "token_gate_rank": 16,
+    "logit_bias": false,
+    "logit_bias_init": "zero",
+    "logit_bias_prior_tau": 0.4,
+    "anchor_loss_weight": 0.0,
+    "distill_weight": 0.25,
+    "distill_temperature": 2.0,
+    "distill_mode": "nontarget_zscore",
+    "classifier_cbr_weight": 0.0,
+    "classifier_cbr_power": 1.0,
+    "classifier_cbr_start_epoch": 1,
+    "train_sampling": "natural",
+    "none_sampling_ratio": 0.75,
+    "train_sampling_start_epoch": 1,
+    "params": 10525285
+  },
+  "checkpoint_path": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_ntzscore_distill_priorcal_20260525_161009\\best_yoloctm.pt",
+  "reports": {
+    "val": {
+      "acc": 0.971399938328708,
+      "macro_p": 0.8899937726068708,
+      "macro_r": 0.8182965460725992,
+      "macro_f1": 0.8439150773496082
+    },
+    "test": {
+      "acc": 0.9730927874792799,
+      "macro_p": 0.8877301964584503,
+      "macro_r": 0.8119078147703201,
+      "macro_f1": 0.8376383299547944
+    }
+  }
+}

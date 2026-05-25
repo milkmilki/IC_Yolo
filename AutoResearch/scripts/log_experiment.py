@@ -91,6 +91,8 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
     classifier_cbr_weight = ctm_cfg.get("classifier_cbr_weight") or checkpoint_meta.get("classifier_cbr_weight")
     classifier_cbr_power = ctm_cfg.get("classifier_cbr_power") or checkpoint_meta.get("classifier_cbr_power")
     classifier_cbr_start_epoch = ctm_cfg.get("classifier_cbr_start_epoch") or checkpoint_meta.get("classifier_cbr_start_epoch")
+    expert_fusion = ctm_cfg.get("expert_fusion") or checkpoint_meta.get("expert_fusion")
+    expert_ctm_init = ctm_cfg.get("expert_ctm_init") or checkpoint_meta.get("expert_ctm_init")
     train_sampling = train_cfg.get("sampling") or checkpoint_meta.get("train_sampling")
     none_sampling_ratio = train_cfg.get("none_sampling_ratio") or checkpoint_meta.get("none_sampling_ratio")
     sampling_start_epoch = train_cfg.get("sampling_start_epoch") or checkpoint_meta.get("train_sampling_start_epoch")
@@ -124,6 +126,8 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
             summary += f" | cbr(w={classifier_cbr_weight},p={classifier_cbr_power})"
             if classifier_cbr_start_epoch is not None:
                 summary += f"@e{classifier_cbr_start_epoch}"
+        if expert_fusion and expert_fusion != "none":
+            summary += f" | experts={expert_fusion}(ctm_init={expert_ctm_init})"
         if train_sampling and train_sampling != "natural":
             summary += f" | sampling={train_sampling}"
             if none_sampling_ratio is not None:
@@ -177,6 +181,8 @@ def load_checkpoint_meta(run_dir: Path) -> tuple[dict[str, Any], Path | None, st
             "classifier_cbr_weight": args.get("classifier_cbr_weight"),
             "classifier_cbr_power": args.get("classifier_cbr_power"),
             "classifier_cbr_start_epoch": args.get("classifier_cbr_start_epoch"),
+            "expert_fusion": args.get("expert_fusion"),
+            "expert_ctm_init": args.get("expert_ctm_init"),
             "train_sampling": args.get("train_sampling"),
             "none_sampling_ratio": args.get("none_sampling_ratio"),
             "train_sampling_start_epoch": args.get("train_sampling_start_epoch"),

@@ -151,6 +151,8 @@ class YoloCTM(nn.Module):
         token_gate_rank: int = 16,
         logprob_fusion: bool = False,
         logprob_fusion_init: float = 0.2,
+        expert_fusion: str = "none",
+        expert_ctm_init: float = 0.4,
         ctm_readout: str = "mean",
         logit_bias: bool = False,
         logit_bias_init: torch.Tensor | None = None,
@@ -185,6 +187,15 @@ class YoloCTM(nn.Module):
             self.logprob_fusion_logit = nn.Parameter(torch.tensor(init_logit, dtype=torch.float32))
         else:
             self.ctm_scale = nn.Parameter(torch.tensor(0.1))
+        self.expert_fusion = str(expert_fusion).lower()
+        if self.expert_fusion not in {"none", "classwise_logprob"}:
+            raise ValueError("expert_fusion must be one of: none, classwise_logprob")
+        if self.expert_fusion == "classwise_logprob":
+            init = min(max(float(expert_ctm_init), 1e-4), 1.0 - 1e-4)
+            init_logit = np.log(init / (1.0 - init))
+            self.expert_ctm_logits = nn.Parameter(torch.full((num_classes,), init_logit, dtype=torch.float32))
+        else:
+            self.expert_ctm_logits = None
         self.feature_adapter_enabled = bool(feature_adapter)
         self.feature_fusion = str(feature_fusion).lower()
         if self.feature_fusion not in {"residual", "gated", "token"}:
@@ -254,7 +265,8 @@ class YoloCTM(nn.Module):
 
         state = self.norm(state)
         pooled = self._pool_ctm_state(state)
-        clean_yolo_logits = self._as_logits(self.yolo_head(feats)) if return_clean else None
+        needs_clean_branch = return_clean or self.expert_fusion == "classwise_logprob"
+        clean_yolo_logits = self._as_logits(self.yolo_head(feats)) if needs_clean_branch else None
         fused_feats = self._apply_feature_adapter(feats, state)
         yolo_logits = self._as_logits(self.yolo_head(fused_feats))
         ctm_logits = self.ctm_cls(pooled)
@@ -274,6 +286,16 @@ class YoloCTM(nn.Module):
             )
         else:
             logits = yolo_logits + self.ctm_scale * ctm_logits
+        if self.expert_fusion == "classwise_logprob":
+            if clean_yolo_logits is None or self.expert_ctm_logits is None:
+                raise RuntimeError("Classwise expert fusion requires clean YOLO logits and route parameters")
+            ctm_weights = torch.sigmoid(self.expert_ctm_logits).clamp(1e-5, 1.0 - 1e-5).view(1, -1)
+            clean_log_probs = F.log_softmax(clean_yolo_logits, dim=1)
+            ctm_log_probs = F.log_softmax(logits, dim=1)
+            logits = torch.logaddexp(
+                clean_log_probs + torch.log1p(-ctm_weights),
+                ctm_log_probs + torch.log(ctm_weights),
+            )
         if self.logit_bias is not None:
             logits = logits + self.logit_bias.view(1, -1)
         if return_aux and return_clean:
@@ -480,6 +502,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--token-gate-rank", type=int, default=16)
     parser.add_argument("--logprob-fusion", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logprob-fusion-init", type=float, default=0.2)
+    parser.add_argument("--expert-fusion", choices=["none", "classwise_logprob"], default="none")
+    parser.add_argument("--expert-ctm-init", type=float, default=0.4)
     parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
     parser.add_argument("--logit-bias", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logit-bias-init", choices=["zero", "prior"], default="zero")
@@ -768,6 +792,8 @@ def main() -> int:
         token_gate_rank=int(args.token_gate_rank),
         logprob_fusion=bool(args.logprob_fusion),
         logprob_fusion_init=float(args.logprob_fusion_init),
+        expert_fusion=str(args.expert_fusion),
+        expert_ctm_init=float(args.expert_ctm_init),
         ctm_readout=str(args.ctm_readout),
         logit_bias=bool(args.logit_bias),
         logit_bias_init=logit_bias_init,
