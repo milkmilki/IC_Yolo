@@ -23,6 +23,7 @@ Keep it short and operational.
 - The GPU reports `400 W` as its minimum configurable power limit. A cross-scan run still BSODed after epoch 7 at this floor on 2026-05-25 (`BugCheck 0x1E`, dump `C:\Windows\Minidump\052526-9703-01.dmp`); do not treat the power cap alone as sufficient protection.
 - For retries after this crash, preserve effective `batch: 64` while reducing instantaneous load with `micro_batch: 32` and two-step gradient accumulation.
 - The micro-batch retry also triggered two BSOD restarts after epoch 1 on 2026-05-25 (`BugCheck 0x3B`, dumps `C:\Windows\Minidump\052526-9562-01.dmp` and `052526-9656-01.dmp`). After consecutive BSODs, stop unattended GPU relaunches and use overnight cycles only for CPU evaluation, logging, literature review, or code preparation until hardware/driver stability is addressed.
+- A CPU-only ensemble evaluation also coincided with a further restart on 2026-05-26 at `01:05:01` (`BugCheck 0x7F`, dump `C:\Windows\Minidump\052626-9859-01.dmp`); a later retry completed, but avoid unattended long-running CPU cache generation or evaluation until system stability is addressed.
 - A CPU resume once exited during `scipy/sklearn` import with a native access violation but succeeded unchanged on immediate retry; if this occurs without a new system bugcheck, retry the CPU resume once before marking the experiment as crashed.
 - Avoid Windows scheduled tasks for this training loop unless there is no foreground option. They repeatedly exited early with status `-1073741510` or re-fired unexpectedly.
 - If the user interrupts the foreground terminal, always check local process state and `pipeline.log` before restarting.
@@ -125,6 +126,10 @@ Keep it short and operational.
   - test macro R `0.89192`
   - test macro F1 `0.90436`
   - key lesson: removing the low-rank third ensemble branch saves `10.496M` parameters while retaining a clear F1 gain over either single model; future compression work should target the two-branch complementarity first.
+- Prepared next compression candidate as of 2026-05-26:
+  - commit `cb0aee7` adds DKD loss mode and configures a single `10.502M` CTM residual adapter to distill the compact two-branch teacher.
+  - rationale: DKD separates target-class confidence from non-target class relations, where the independent YOLO/CTM complementarity appears to live.
+  - required cache `AutoResearch/cache/train_logprob_slim_075025_tau0025.npz` is intentionally not generated yet because the host also restarted during a long CPU-only evaluation.
 
 ## Practical workflow
 
