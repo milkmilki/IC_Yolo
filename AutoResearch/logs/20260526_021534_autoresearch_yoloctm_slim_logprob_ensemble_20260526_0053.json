@@ -1,0 +1,112 @@
+{
+  "row": {
+    "timestamp": "2026-05-26T02:15:34",
+    "status": "keep",
+    "algorithm": "ensemble",
+    "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_slim_logprob_ensemble_20260526_0053",
+    "params_m": "22.159",
+    "epochs": "10",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "cpu",
+    "model_summary": "fixed logprob ensemble: 0.75*yolo26m + 0.25*ctm_adapter + tau=0.025",
+    "val_acc": "0.980958988590811",
+    "val_macro_p": "0.9226732029764462",
+    "val_macro_r": "0.893168447305456",
+    "val_macro_f1": "0.9057013996007733",
+    "test_acc": "0.9809182375390308",
+    "test_macro_p": "0.9201496033822344",
+    "test_macro_r": "0.8919177340879144",
+    "test_macro_f1": "0.904355161199867",
+    "description": "Slim fixed log-probability ensemble of YOLO26m and best CTM adapter with original three-expert weights renormalized after dropping the low-rank branch; preserves a strong accuracy/F1 gain over single models at 10.496M fewer parameters than the three-expert ensemble."
+  },
+  "config": {
+    "dataset": {
+      "output": "E:\\Cjn\\PCB_Yolo\\data\\wm811k_cls",
+      "image_size": 224,
+      "ratios": [
+        70,
+        15,
+        15
+      ],
+      "include_none": true,
+      "seed": 42
+    },
+    "prepare": {
+      "enabled": false
+    },
+    "model": {
+      "algorithm": "yoloctm",
+      "weights": "ensemble:yolo26m+ctm_adapter+ctm_lowrank",
+      "ctm": {
+        "d_model": 96,
+        "steps": 4,
+        "dropout": 0.1,
+        "class_weight_power": 0.5
+      },
+      "ensemble": {
+        "type": "fixed_log_probability_average",
+        "weights": {
+          "yolo26m": 0.75,
+          "ctm_adapter": 0.25,
+          "ctm_lowrank": 0.0
+        },
+        "prior_logit_tau": 0.025,
+        "sources": {
+          "yolo26m": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\wm811k_yolo26m_20260518_152306\\weights\\best.pt",
+          "ctm_adapter": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_ctmadapter_20260521_195218\\best_yoloctm.pt",
+          "ctm_lowrank": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_ctmadapter_lowrank_priorcal_20260522_155358\\best_yoloctm.pt"
+        }
+      }
+    },
+    "train": {
+      "epochs": 10,
+      "imgsz": 224,
+      "batch": 64,
+      "device": "cpu",
+      "workers": 0
+    },
+    "metrics": {
+      "enabled": true,
+      "splits": [
+        "val",
+        "test"
+      ],
+      "batch": 128,
+      "prior_logit_tau": 0.025
+    },
+    "logging": {
+      "autoresearch": true,
+      "description": "Slim fixed log-probability ensemble of YOLO26m and best CTM adapter with original three-expert weights renormalized after dropping the low-rank branch"
+    }
+  },
+  "checkpoint_meta": {},
+  "checkpoint_path": "",
+  "reports": {
+    "val": {
+      "acc": 0.980958988590811,
+      "macro_p": 0.9226732029764462,
+      "macro_r": 0.893168447305456,
+      "macro_f1": 0.9057013996007733
+    },
+    "test": {
+      "acc": 0.9809182375390308,
+      "macro_p": 0.9201496033822344,
+      "macro_r": 0.8919177340879144,
+      "macro_f1": 0.904355161199867
+    }
+  },
+  "ensemble_metadata": {
+    "type": "fixed_log_probability_average",
+    "active_weights": {
+      "yolo26m": 0.75,
+      "ctm_adapter": 0.25
+    },
+    "prior_logit_tau": 0.025,
+    "active_sources": {
+      "yolo26m": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\wm811k_yolo26m_20260518_152306\\weights\\best.pt",
+      "ctm_adapter": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_ctmadapter_20260521_195218\\best_yoloctm.pt"
+    },
+    "note": "Low-rank branch omitted from active inference; 0.75/0.25 are the prior 0.6/0.2 weights renormalized without a parameter search."
+  }
+}

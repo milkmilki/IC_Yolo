@@ -116,6 +116,15 @@ Keep it short and operational.
   - test macro R `0.89635`
   - test macro F1 `0.89835`
   - key lesson: a CTM residual feature adapter can over-boost minority recall, but validation-selected class-prior logit calibration with `tau=0.4` restores precision and beats the standard `yolo26m-cls` baseline while staying smaller.
+- Best compact ensemble Pareto point as of 2026-05-26:
+  - `autoresearch_yoloctm_slim_logprob_ensemble_20260526_0053`
+  - active branches: `0.75*yolo26m + 0.25*ctm_adapter + prior_tau=0.025`
+  - params `22.159M`
+  - test acc `0.98092`
+  - test macro P `0.92015`
+  - test macro R `0.89192`
+  - test macro F1 `0.90436`
+  - key lesson: removing the low-rank third ensemble branch saves `10.496M` parameters while retaining a clear F1 gain over either single model; future compression work should target the two-branch complementarity first.
 
 ## Practical workflow
 
