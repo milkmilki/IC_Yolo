@@ -22,6 +22,7 @@ Keep it short and operational.
 - A direct SSH foreground GPU phase held open by the agent completed successfully on 2026-05-25 at a `400 W` power limit; use this method for subsequent runs and perform the CPU resume step afterward.
 - The GPU reports `400 W` as its minimum configurable power limit. A cross-scan run still BSODed after epoch 7 at this floor on 2026-05-25 (`BugCheck 0x1E`, dump `C:\Windows\Minidump\052526-9703-01.dmp`); do not treat the power cap alone as sufficient protection.
 - For retries after this crash, preserve effective `batch: 64` while reducing instantaneous load with `micro_batch: 32` and two-step gradient accumulation.
+- The micro-batch retry also triggered two BSOD restarts after epoch 1 on 2026-05-25 (`BugCheck 0x3B`, dumps `C:\Windows\Minidump\052526-9562-01.dmp` and `052526-9656-01.dmp`). After consecutive BSODs, stop unattended GPU relaunches and use overnight cycles only for CPU evaluation, logging, literature review, or code preparation until hardware/driver stability is addressed.
 - A CPU resume once exited during `scipy/sklearn` import with a native access violation but succeeded unchanged on immediate retry; if this occurs without a new system bugcheck, retry the CPU resume once before marking the experiment as crashed.
 - Avoid Windows scheduled tasks for this training loop unless there is no foreground option. They repeatedly exited early with status `-1073741510` or re-fired unexpectedly.
 - If the user interrupts the foreground terminal, always check local process state and `pipeline.log` before restarting.
