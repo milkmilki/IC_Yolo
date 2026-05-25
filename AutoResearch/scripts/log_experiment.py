@@ -90,6 +90,7 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
     distill_mode = ctm_cfg.get("distill_mode") or checkpoint_meta.get("distill_mode")
     classifier_cbr_weight = ctm_cfg.get("classifier_cbr_weight") or checkpoint_meta.get("classifier_cbr_weight")
     classifier_cbr_power = ctm_cfg.get("classifier_cbr_power") or checkpoint_meta.get("classifier_cbr_power")
+    classifier_cbr_start_epoch = ctm_cfg.get("classifier_cbr_start_epoch") or checkpoint_meta.get("classifier_cbr_start_epoch")
     train_sampling = train_cfg.get("sampling") or checkpoint_meta.get("train_sampling")
     none_sampling_ratio = train_cfg.get("none_sampling_ratio") or checkpoint_meta.get("none_sampling_ratio")
     sampling_start_epoch = train_cfg.get("sampling_start_epoch") or checkpoint_meta.get("train_sampling_start_epoch")
@@ -121,6 +122,8 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
                 summary += f"[{distill_mode}]"
         if classifier_cbr_weight:
             summary += f" | cbr(w={classifier_cbr_weight},p={classifier_cbr_power})"
+            if classifier_cbr_start_epoch is not None:
+                summary += f"@e{classifier_cbr_start_epoch}"
         if train_sampling and train_sampling != "natural":
             summary += f" | sampling={train_sampling}"
             if none_sampling_ratio is not None:
@@ -173,6 +176,7 @@ def load_checkpoint_meta(run_dir: Path) -> tuple[dict[str, Any], Path | None, st
             "distill_mode": args.get("distill_mode"),
             "classifier_cbr_weight": args.get("classifier_cbr_weight"),
             "classifier_cbr_power": args.get("classifier_cbr_power"),
+            "classifier_cbr_start_epoch": args.get("classifier_cbr_start_epoch"),
             "train_sampling": args.get("train_sampling"),
             "none_sampling_ratio": args.get("none_sampling_ratio"),
             "train_sampling_start_epoch": args.get("train_sampling_start_epoch"),

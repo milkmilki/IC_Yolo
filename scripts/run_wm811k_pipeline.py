@@ -315,6 +315,8 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         str(ctm_config.get("classifier_cbr_weight", 0.0)),
         "--classifier-cbr-power",
         str(ctm_config.get("classifier_cbr_power", 1.0)),
+        "--classifier-cbr-start-epoch",
+        str(ctm_config.get("classifier_cbr_start_epoch", 1)),
         "--loss",
         str(ctm_config.get("loss", "weighted_ce")),
         "--train-sampling",

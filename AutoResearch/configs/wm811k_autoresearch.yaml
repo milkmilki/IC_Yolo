@@ -35,6 +35,7 @@ model:
     distill_mode: full
     classifier_cbr_weight: 0.02
     classifier_cbr_power: 1.0
+    classifier_cbr_start_epoch: 7
     logprob_fusion: false
     logprob_fusion_init: 0.2
     readout: mean
@@ -50,7 +51,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_cbr_priorcal
+  name: autoresearch_yoloctm_deferred_cbr_priorcal
   add_timestamp: true
   exist_ok: true
 
@@ -72,4 +73,4 @@ metrics:
 logging:
   filename: pipeline.log
   autoresearch: true
-  description: "CTM residual feature adapter with class-balanced classifier-norm regularization (w=0.02,p=1.0) and validation-selected class-prior logit calibration"
+  description: "CTM residual feature adapter with deferred class-balanced classifier-norm regularization (w=0.02,p=1.0 from epoch 7) and validation-selected class-prior logit calibration"

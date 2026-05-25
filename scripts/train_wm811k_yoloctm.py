@@ -493,6 +493,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--distill-mode", choices=["full", "nontarget_zscore"], default="full")
     parser.add_argument("--classifier-cbr-weight", type=float, default=0.0)
     parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
+    parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax"], default="weighted_ce")
     parser.add_argument("--train-sampling", choices=["natural", "none_aware"], default="natural")
     parser.add_argument("--none-sampling-ratio", type=float, default=0.5)
@@ -787,6 +788,11 @@ def main() -> int:
             f"weight={float(args.distill_weight):.4f} temperature={float(args.distill_temperature):.4f} "
             f"mode={args.distill_mode}"
         )
+    if float(args.classifier_cbr_weight) > 0:
+        print(
+            f"[cbr] classifier regularization weight={float(args.classifier_cbr_weight):.4f} "
+            f"power={float(args.classifier_cbr_power):.4f} starts at epoch {int(args.classifier_cbr_start_epoch)}"
+        )
 
     out_dir = Path(args.project) / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -795,6 +801,11 @@ def main() -> int:
     best_val_acc = 0.0
     history: list[dict[str, float]] = []
     for epoch in range(1, args.epochs + 1):
+        classifier_cbr_weight = (
+            float(args.classifier_cbr_weight)
+            if epoch >= int(args.classifier_cbr_start_epoch)
+            else 0.0
+        )
         train_loader = (
             rebalanced_train_loader
             if args.train_sampling == "none_aware" and epoch >= int(args.train_sampling_start_epoch)
@@ -813,7 +824,7 @@ def main() -> int:
             distill_temperature=float(args.distill_temperature),
             distill_mode=str(args.distill_mode),
             class_counts=class_counts,
-            classifier_cbr_weight=float(args.classifier_cbr_weight),
+            classifier_cbr_weight=classifier_cbr_weight,
             classifier_cbr_power=float(args.classifier_cbr_power),
         )
         val_loss, val_acc, val_macro_f1 = evaluate(model, val_loader, criterion, device)
@@ -848,6 +859,7 @@ def main() -> int:
                     "best_val_macro_f1": best_val_f1,
                     "classifier_cbr_weight": float(args.classifier_cbr_weight),
                     "classifier_cbr_power": float(args.classifier_cbr_power),
+                    "classifier_cbr_start_epoch": int(args.classifier_cbr_start_epoch),
                 },
                 out_dir / "best_yoloctm.pt",
             )
