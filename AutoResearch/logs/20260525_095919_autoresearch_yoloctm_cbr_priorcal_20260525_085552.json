@@ -1,0 +1,121 @@
+{
+  "row": {
+    "timestamp": "2026-05-25T09:59:19",
+    "status": "crash",
+    "algorithm": "yoloctm",
+    "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_cbr_priorcal_20260525_085552",
+    "params_m": "",
+    "epochs": "10",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "0",
+    "model_summary": "yolo26m-cls.pt | ctm(d=96,s=4,drop=0.1,pow=0.5) | fusion=residual | cbr(w=0.02,p=1.0)",
+    "val_acc": "",
+    "val_macro_p": "",
+    "val_macro_r": "",
+    "val_macro_f1": "",
+    "test_acc": "",
+    "test_macro_p": "",
+    "test_macro_r": "",
+    "test_macro_f1": "",
+    "description": "System restart before epoch 1. No checkpoint or metrics. CBR remains unassessed."
+  },
+  "config": {
+    "dataset": {
+      "source": "data/MIR-WM811K",
+      "output": "data/wm811k_cls",
+      "image_size": 224,
+      "ratios": [
+        70,
+        15,
+        15
+      ],
+      "include_none": true,
+      "seed": 42,
+      "overwrite": false
+    },
+    "prepare": {
+      "enabled": false
+    },
+    "model": {
+      "algorithm": "yoloctm",
+      "config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "ctm": {
+        "d_model": 96,
+        "steps": 4,
+        "dropout": 0.1,
+        "class_weight_power": 0.5,
+        "adapter_rank": 0,
+        "feature_adapter": true,
+        "feature_fusion": "residual",
+        "gate_rank": 16,
+        "token_gate_rank": 16,
+        "logit_bias": false,
+        "logit_bias_init": "zero",
+        "logit_bias_prior_tau": 0.4,
+        "anchor_loss_weight": 0.0,
+        "distill_logprobs": null,
+        "distill_weight": 0.0,
+        "distill_temperature": 2.0,
+        "distill_mode": "full",
+        "classifier_cbr_weight": 0.02,
+        "classifier_cbr_power": 1.0,
+        "logprob_fusion": false,
+        "logprob_fusion_init": 0.2,
+        "readout": "mean"
+      }
+    },
+    "train": {
+      "epochs": 10,
+      "imgsz": 224,
+      "batch": 64,
+      "device": "0",
+      "workers": 0,
+      "sampling": "natural",
+      "none_sampling_ratio": 0.75,
+      "sampling_start_epoch": 1,
+      "patience": 20,
+      "project": "runs/classify",
+      "name": "autoresearch_yoloctm_cbr_priorcal",
+      "add_timestamp": true,
+      "exist_ok": true
+    },
+    "validate": {
+      "enabled": true,
+      "split": "val"
+    },
+    "test": {
+      "enabled": true,
+      "split": "test"
+    },
+    "metrics": {
+      "enabled": true,
+      "splits": [
+        "val",
+        "test"
+      ],
+      "batch": 128,
+      "prior_logit_tau": "auto",
+      "prior_logit_tau_candidates": [
+        0.3,
+        0.4,
+        0.5,
+        0.6,
+        0.7
+      ]
+    },
+    "logging": {
+      "filename": "pipeline.log",
+      "autoresearch": true,
+      "description": "CTM residual feature adapter with class-balanced classifier-norm regularization (w=0.02,p=1.0) and validation-selected class-prior logit calibration"
+    }
+  },
+  "checkpoint_meta": {},
+  "checkpoint_path": "",
+  "reports": {
+    "val": {},
+    "test": {}
+  }
+}

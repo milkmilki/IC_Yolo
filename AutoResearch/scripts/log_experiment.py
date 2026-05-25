@@ -272,7 +272,7 @@ def write_json_log(run_dir: Path, payload: dict[str, Any]) -> Path:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path = LOG_DIR / f"{timestamp}_{run_dir.name}.json"
-    log_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    log_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     return log_path
 
 
