@@ -560,6 +560,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pretrained", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch", type=int, default=64)
+    parser.add_argument("--micro-batch", type=int, default=0, help="Per-step batch; 0 uses --batch without accumulation")
     parser.add_argument("--imgsz", type=int, default=224)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
@@ -711,15 +712,18 @@ def train_one_epoch(
     class_counts: torch.Tensor | None = None,
     classifier_cbr_weight: float = 0.0,
     classifier_cbr_power: float = 1.0,
+    grad_accum_steps: int = 1,
 ) -> tuple[float, float]:
     model.train()
+    grad_accum_steps = max(1, int(grad_accum_steps))
     total_loss = 0.0
     correct = 0
     total = 0
-    for batch in loader:
+    optimizer.zero_grad(set_to_none=True)
+    num_batches = len(loader)
+    for batch_index, batch in enumerate(loader):
         images, labels, indices = unpack_batch(batch)
         images, labels = images.to(device), labels.to(device)
-        optimizer.zero_grad(set_to_none=True)
         if aux_loss_weight > 0 and anchor_loss_weight > 0:
             logits, ctm_logits, clean_logits = model(images, return_aux=True, return_clean=True)
             loss = (
@@ -751,8 +755,12 @@ def train_one_epoch(
                 class_counts,
                 power=float(classifier_cbr_power),
             )
-        loss.backward()
-        optimizer.step()
+        group_start = (batch_index // grad_accum_steps) * grad_accum_steps
+        group_steps = min(grad_accum_steps, num_batches - group_start)
+        (loss / float(group_steps)).backward()
+        if (batch_index + 1) % grad_accum_steps == 0 or batch_index + 1 == num_batches:
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
         total_loss += loss.item() * labels.size(0)
         correct += (logits.argmax(dim=1) == labels).sum().item()
         total += labels.size(0)
@@ -801,12 +809,21 @@ def main() -> int:
 
     train_ds = IndexedImageFolder(args.data / "train", transform=train_transform)
     val_ds = IndexedImageFolder(args.data / "val", transform=val_transform)
+    micro_batch = int(args.micro_batch) if int(args.micro_batch) > 0 else int(args.batch)
+    if micro_batch > int(args.batch) or int(args.batch) % micro_batch != 0:
+        raise ValueError("--micro-batch must be a positive divisor of --batch")
+    grad_accum_steps = int(args.batch) // micro_batch
+    if grad_accum_steps > 1:
+        print(
+            f"[runtime] effective_batch={int(args.batch)} micro_batch={micro_batch} "
+            f"grad_accum_steps={grad_accum_steps}"
+        )
 
     loader_generator = torch.Generator()
     loader_generator.manual_seed(int(args.seed))
     natural_train_loader = DataLoader(
         train_ds,
-        batch_size=args.batch,
+        batch_size=micro_batch,
         shuffle=True,
         num_workers=args.workers,
         pin_memory=device.type == "cuda",
@@ -823,7 +840,7 @@ def main() -> int:
         )
         rebalanced_train_loader = DataLoader(
             train_ds,
-            batch_size=args.batch,
+            batch_size=micro_batch,
             sampler=train_sampler,
             num_workers=args.workers,
             pin_memory=device.type == "cuda",
@@ -833,7 +850,7 @@ def main() -> int:
             print(f"[sampling] deferred none-aware sampler starts at epoch {int(args.train_sampling_start_epoch)}")
     val_loader = DataLoader(
         val_ds,
-        batch_size=args.batch,
+        batch_size=micro_batch,
         shuffle=False,
         num_workers=args.workers,
         pin_memory=device.type == "cuda",
@@ -943,6 +960,7 @@ def main() -> int:
             class_counts=class_counts,
             classifier_cbr_weight=classifier_cbr_weight,
             classifier_cbr_power=float(args.classifier_cbr_power),
+            grad_accum_steps=grad_accum_steps,
         )
         val_loss, val_acc, val_macro_f1 = evaluate(model, val_loader, criterion, device)
         history.append({

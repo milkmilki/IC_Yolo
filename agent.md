@@ -20,6 +20,8 @@ Keep it short and operational.
 - A remote `Start-Process` test on 2026-05-25 created the run directory but exited before runtime/epoch output as soon as the launching session ended. Treat detached `Start-Process` as unreliable for this loop; do not use it for training.
 - Because GPU evaluation triggered a BSOD after a completed train, run GPU training with `--skip-val --skip-test --skip-metrics`, then resume metrics on CPU in the same run directory.
 - A direct SSH foreground GPU phase held open by the agent completed successfully on 2026-05-25 at a `400 W` power limit; use this method for subsequent runs and perform the CPU resume step afterward.
+- The GPU reports `400 W` as its minimum configurable power limit. A cross-scan run still BSODed after epoch 7 at this floor on 2026-05-25 (`BugCheck 0x1E`, dump `C:\Windows\Minidump\052526-9703-01.dmp`); do not treat the power cap alone as sufficient protection.
+- For retries after this crash, preserve effective `batch: 64` while reducing instantaneous load with `micro_batch: 32` and two-step gradient accumulation.
 - A CPU resume once exited during `scipy/sklearn` import with a native access violation but succeeded unchanged on immediate retry; if this occurs without a new system bugcheck, retry the CPU resume once before marking the experiment as crashed.
 - Avoid Windows scheduled tasks for this training loop unless there is no foreground option. They repeatedly exited early with status `-1073741510` or re-fired unexpectedly.
 - If the user interrupts the foreground terminal, always check local process state and `pipeline.log` before restarting.

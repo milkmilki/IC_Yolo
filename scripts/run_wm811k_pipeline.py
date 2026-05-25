@@ -280,6 +280,8 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
         str(train_config.get("epochs", 40)),
         "--batch",
         str(train_config.get("batch", 64)),
+        "--micro-batch",
+        str(train_config.get("micro_batch", 0)),
         "--imgsz",
         str(train_config.get("imgsz", dataset_config.get("image_size", 224))),
         "--lr",

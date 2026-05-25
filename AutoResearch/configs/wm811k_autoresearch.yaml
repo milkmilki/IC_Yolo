@@ -51,6 +51,7 @@ train:
   epochs: 10
   imgsz: 224
   batch: 64
+  micro_batch: 32
   device: "0"
   workers: 0
   sampling: natural
@@ -80,4 +81,4 @@ metrics:
 logging:
   filename: pipeline.log
   autoresearch: true
-  description: "VMamba-inspired shared-gated four-direction cross-scan CTM token mixer with residual feature adapter and validation-selected class-prior logit calibration"
+  description: "VMamba-inspired shared-gated four-direction cross-scan CTM token mixer with residual feature adapter and validation-selected class-prior logit calibration; effective batch 64 executed as micro_batch 32 x accumulation 2 after GPU BSOD retry"
