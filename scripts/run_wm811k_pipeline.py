@@ -61,6 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-train", action="store_true", help="Skip model training")
     parser.add_argument("--skip-val", action="store_true", help="Skip validation on the val split")
     parser.add_argument("--skip-test", action="store_true", help="Skip evaluation on the test split")
+    parser.add_argument("--skip-metrics", action="store_true", help="Skip report/metric generation and defer AutoResearch logging")
     parser.add_argument(
         "--resume-run-dir",
         type=Path,
@@ -780,8 +781,16 @@ def main() -> int:
         data_root = resolve_path(dataset_config.get("output", "data/wm811k_cls"))
         train_device = str(args.eval_device or train_config.get("device", "0"))
         train_imgsz = int(train_config.get("imgsz", dataset_config.get("image_size", 224)))
+        evaluation_requested = (
+            (validate_config.get("enabled", True) and not args.skip_val)
+            or (test_config.get("enabled", True) and not args.skip_test)
+            or (metrics_config.get("enabled", False) and not args.skip_metrics)
+        )
         prior_logit_tau_config = metrics_config.get("prior_logit_tau", 0.0)
-        if args.prior_logit_tau is not None:
+        if not evaluation_requested:
+            prior_logit_tau = 0.0
+            print("[calibration] Deferred until evaluation is run")
+        elif args.prior_logit_tau is not None:
             prior_logit_tau = float(args.prior_logit_tau)
             print(f"[calibration] Using supplied prior_logit_tau={prior_logit_tau:.4f}")
         elif model_result["algorithm"] == "yoloctm" and str(prior_logit_tau_config).strip().lower() == "auto":
@@ -831,7 +840,7 @@ def main() -> int:
         else:
             print("[test] Skipped")
 
-        if metrics_config.get("enabled", False):
+        if metrics_config.get("enabled", False) and not args.skip_metrics:
             metrics_batch = int(metrics_config.get("batch", train_config.get("batch", 64)))
             for split in metrics_config.get("splits", []):
                 if model_result["algorithm"] == "yoloctm":
@@ -851,9 +860,11 @@ def main() -> int:
         else:
             print("[metrics] Skipped")
 
-        if should_log_autoresearch(config_path, config):
+        if should_log_autoresearch(config_path, config) and not args.skip_metrics:
             description = str(logging_config.get("description", "Fixed-budget YoloCTM baseline"))
             log_autoresearch_run(run_dir, "keep", description)
+        elif should_log_autoresearch(config_path, config):
+            print("[autoresearch] Deferred until metric reports are generated")
 
         print("\n[pipeline] Done")
     return 0
