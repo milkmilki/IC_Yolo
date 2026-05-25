@@ -61,6 +61,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-train", action="store_true", help="Skip model training")
     parser.add_argument("--skip-val", action="store_true", help="Skip validation on the val split")
     parser.add_argument("--skip-test", action="store_true", help="Skip evaluation on the test split")
+    parser.add_argument(
+        "--resume-run-dir",
+        type=Path,
+        default=None,
+        help="Resume evaluation/logging in an existing run directory; requires --skip-train",
+    )
+    parser.add_argument("--eval-device", default=None, help="Override the device used for validation/test/metrics")
+    parser.add_argument(
+        "--prior-logit-tau",
+        type=float,
+        default=None,
+        help="Use a known prior-logit calibration tau instead of selecting it again",
+    )
     parser.add_argument("--check-config", action="store_true", help="Load config and print the resolved plan")
     return parser.parse_args()
 
@@ -711,8 +724,14 @@ def main() -> int:
     test_config = get_section(config, "test")
     metrics_config = get_section(config, "metrics")
 
-    run_name = build_run_name(train_config)
-    run_dir = build_run_dir(train_config, run_name)
+    if args.resume_run_dir is not None:
+        if not args.skip_train:
+            raise ValueError("--resume-run-dir requires --skip-train")
+        run_dir = resolve_path(args.resume_run_dir).resolve()
+        run_name = run_dir.name
+    else:
+        run_name = build_run_name(train_config)
+        run_dir = build_run_dir(train_config, run_name)
 
     if args.check_config:
         print_plan(config_path, config, run_name, run_dir)
@@ -725,7 +744,10 @@ def main() -> int:
         print(f"[pipeline] Config: {config_path}")
         print(f"[pipeline] Run directory: {run_dir}")
         print(f"[pipeline] Log file: {log_path}")
-        copy_config(config_path, run_dir, config)
+        if args.resume_run_dir is None:
+            copy_config(config_path, run_dir, config)
+        else:
+            print("[pipeline] Resuming existing run; preserving saved config and checkpoint")
 
         prepare_enabled = bool(prepare_config.get("enabled", True))
         if args.skip_prepare or not prepare_enabled:
@@ -756,10 +778,13 @@ def main() -> int:
                 model_result["model"] = find_best_model(run_dir, fallback_model)
 
         data_root = resolve_path(dataset_config.get("output", "data/wm811k_cls"))
-        train_device = str(train_config.get("device", "0"))
+        train_device = str(args.eval_device or train_config.get("device", "0"))
         train_imgsz = int(train_config.get("imgsz", dataset_config.get("image_size", 224)))
         prior_logit_tau_config = metrics_config.get("prior_logit_tau", 0.0)
-        if model_result["algorithm"] == "yoloctm" and str(prior_logit_tau_config).strip().lower() == "auto":
+        if args.prior_logit_tau is not None:
+            prior_logit_tau = float(args.prior_logit_tau)
+            print(f"[calibration] Using supplied prior_logit_tau={prior_logit_tau:.4f}")
+        elif model_result["algorithm"] == "yoloctm" and str(prior_logit_tau_config).strip().lower() == "auto":
             candidates = [float(value) for value in metrics_config.get("prior_logit_tau_candidates", [0.2, 0.3, 0.4, 0.5, 0.6, 0.7])]
             prior_logit_tau = select_yoloctm_prior_tau(
                 model_result["checkpoint"],
