@@ -16,6 +16,7 @@ from torchvision.transforms import InterpolationMode
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DKD_NON_TARGET_WEIGHT = 8.0
 
 
 def set_seed(seed: int) -> None:
@@ -592,7 +593,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--distill-logprobs", type=Path, default=None, help="Optional NPZ with train-split teacher log-probabilities")
     parser.add_argument("--distill-weight", type=float, default=0.0)
     parser.add_argument("--distill-temperature", type=float, default=2.0)
-    parser.add_argument("--distill-mode", choices=["full", "nontarget_zscore"], default="full")
+    parser.add_argument("--distill-mode", choices=["full", "nontarget_zscore", "dkd"], default="full")
     parser.add_argument("--classifier-cbr-weight", type=float, default=0.0)
     parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
@@ -618,6 +619,11 @@ def _zscore(logits: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     return (logits - mean) / std
 
 
+def _collapse_target_distribution(probs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    target = probs.gather(1, labels.view(-1, 1))
+    return torch.cat([target, 1.0 - target], dim=1)
+
+
 def distillation_loss(
     logits: torch.Tensor,
     teacher_log_probs: torch.Tensor,
@@ -627,6 +633,29 @@ def distillation_loss(
 ) -> torch.Tensor:
     temperature = max(float(temperature), 1e-6)
     mode = str(mode).lower()
+    if mode == "dkd":
+        if labels is None:
+            raise ValueError("labels are required for dkd distillation")
+        student_scaled = logits / temperature
+        teacher_scaled = teacher_log_probs / temperature
+        student_probs = F.softmax(student_scaled, dim=1)
+        teacher_probs = F.softmax(teacher_scaled, dim=1)
+        student_target = _collapse_target_distribution(student_probs, labels)
+        teacher_target = _collapse_target_distribution(teacher_probs, labels)
+        target_loss = F.kl_div(
+            torch.log(student_target.clamp_min(1e-12)),
+            teacher_target,
+            reduction="batchmean",
+        )
+        target_mask = F.one_hot(labels, num_classes=logits.shape[1]).bool()
+        student_nontarget = student_scaled.masked_fill(target_mask, -1e9)
+        teacher_nontarget = teacher_scaled.masked_fill(target_mask, -1e9)
+        nontarget_loss = F.kl_div(
+            F.log_softmax(student_nontarget, dim=1),
+            F.softmax(teacher_nontarget, dim=1),
+            reduction="batchmean",
+        )
+        return (target_loss + DKD_NON_TARGET_WEIGHT * nontarget_loss) * temperature * temperature
     if mode == "nontarget_zscore":
         if labels is None:
             raise ValueError("labels are required for nontarget_zscore distillation")
