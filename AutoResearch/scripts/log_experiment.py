@@ -96,6 +96,8 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
     freeze_yolo_anchor = ctm_cfg.get("freeze_yolo_anchor") if "freeze_yolo_anchor" in ctm_cfg else checkpoint_meta.get("freeze_yolo_anchor")
     spatial_encoding = ctm_cfg.get("spatial_encoding") or checkpoint_meta.get("spatial_encoding")
     spatial_encoding_scale_init = ctm_cfg.get("spatial_encoding_scale_init") or checkpoint_meta.get("spatial_encoding_scale_init")
+    token_mixer = ctm_cfg.get("token_mixer") or checkpoint_meta.get("token_mixer")
+    scan_scale_init = ctm_cfg.get("scan_scale_init") or checkpoint_meta.get("scan_scale_init")
     train_sampling = train_cfg.get("sampling") or checkpoint_meta.get("train_sampling")
     none_sampling_ratio = train_cfg.get("none_sampling_ratio") or checkpoint_meta.get("none_sampling_ratio")
     sampling_start_epoch = train_cfg.get("sampling_start_epoch") or checkpoint_meta.get("train_sampling_start_epoch")
@@ -135,6 +137,8 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
             summary += " | frozen_yolo_anchor"
         if spatial_encoding and spatial_encoding != "none":
             summary += f" | spatial={spatial_encoding}(scale={spatial_encoding_scale_init})"
+        if token_mixer and token_mixer != "none":
+            summary += f" | mixer={token_mixer}(scale={scan_scale_init})"
         if train_sampling and train_sampling != "natural":
             summary += f" | sampling={train_sampling}"
             if none_sampling_ratio is not None:
@@ -193,6 +197,8 @@ def load_checkpoint_meta(run_dir: Path) -> tuple[dict[str, Any], Path | None, st
             "freeze_yolo_anchor": args.get("freeze_yolo_anchor"),
             "spatial_encoding": args.get("spatial_encoding"),
             "spatial_encoding_scale_init": args.get("spatial_encoding_scale_init"),
+            "token_mixer": args.get("token_mixer"),
+            "scan_scale_init": args.get("scan_scale_init"),
             "train_sampling": args.get("train_sampling"),
             "none_sampling_ratio": args.get("none_sampling_ratio"),
             "train_sampling_start_epoch": args.get("train_sampling_start_epoch"),

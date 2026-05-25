@@ -41,8 +41,10 @@ model:
     expert_fusion: none
     expert_ctm_init: 0.4
     freeze_yolo_anchor: false
-    spatial_encoding: polar
+    spatial_encoding: none
     spatial_encoding_scale_init: 0.05
+    token_mixer: cross_scan
+    scan_scale_init: 0.05
     readout: mean
 
 train:
@@ -56,7 +58,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_polarpos_priorcal
+  name: autoresearch_yoloctm_crossscan_priorcal
   add_timestamp: true
   exist_ok: true
 
@@ -78,4 +80,4 @@ metrics:
 logging:
   filename: pipeline.log
   autoresearch: true
-  description: "CTM residual feature adapter with lightweight wafer polar-coordinate token encoding and validation-selected class-prior logit calibration"
+  description: "VMamba-inspired shared-gated four-direction cross-scan CTM token mixer with residual feature adapter and validation-selected class-prior logit calibration"

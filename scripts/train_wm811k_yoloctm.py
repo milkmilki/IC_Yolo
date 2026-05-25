@@ -125,6 +125,40 @@ class CTMBlock(nn.Module):
         return self.norm(updated)
 
 
+class SharedCrossScanMixer(nn.Module):
+    """Lightweight four-direction token propagation with shared scan parameters."""
+
+    def __init__(self, d_model: int, scale_init: float = 0.05) -> None:
+        super().__init__()
+        self.retention = nn.Linear(d_model, 1)
+        self.proj = nn.Linear(d_model, d_model, bias=False)
+        self.scale = nn.Parameter(torch.tensor(float(scale_init)))
+
+    def _scan(self, sequence: torch.Tensor) -> torch.Tensor:
+        retention = torch.sigmoid(self.retention(sequence))
+        state = torch.zeros_like(sequence[:, :, 0, :])
+        outputs: list[torch.Tensor] = []
+        for index in range(sequence.shape[2]):
+            keep = retention[:, :, index, :]
+            state = keep * state + (1.0 - keep) * sequence[:, :, index, :]
+            outputs.append(state)
+        return torch.stack(outputs, dim=2)
+
+    def forward(self, tokens: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        batch, length, channels = tokens.shape
+        if length != height * width:
+            raise ValueError(f"Token length {length} does not match spatial shape {height}x{width}")
+        grid = tokens.reshape(batch, height, width, channels)
+        left_to_right = self._scan(grid)
+        right_to_left = torch.flip(self._scan(torch.flip(grid, dims=[2])), dims=[2])
+        vertical = grid.transpose(1, 2)
+        top_to_bottom = self._scan(vertical).transpose(1, 2)
+        bottom_to_top = torch.flip(self._scan(torch.flip(vertical, dims=[2])), dims=[2]).transpose(1, 2)
+        context = (left_to_right + right_to_left + top_to_bottom + bottom_to_top) * 0.25
+        delta = (context - grid).reshape(batch, length, channels)
+        return tokens + self.scale * self.proj(delta)
+
+
 class BalancedSoftmaxLoss(nn.Module):
     def __init__(self, class_counts: torch.Tensor) -> None:
         super().__init__()
@@ -155,6 +189,8 @@ class YoloCTM(nn.Module):
         expert_ctm_init: float = 0.4,
         spatial_encoding: str = "none",
         spatial_encoding_scale_init: float = 0.05,
+        token_mixer: str = "none",
+        scan_scale_init: float = 0.05,
         ctm_readout: str = "mean",
         logit_bias: bool = False,
         logit_bias_init: torch.Tensor | None = None,
@@ -172,6 +208,14 @@ class YoloCTM(nn.Module):
         else:
             self.spatial_proj = None
             self.spatial_scale = None
+        self.token_mixer_type = str(token_mixer).lower()
+        if self.token_mixer_type not in {"none", "cross_scan"}:
+            raise ValueError("token_mixer must be one of: none, cross_scan")
+        self.cross_scan_mixer = (
+            SharedCrossScanMixer(d_model=d_model, scale_init=scan_scale_init)
+            if self.token_mixer_type == "cross_scan"
+            else None
+        )
         self.ctm_block = CTMBlock(d_model=d_model, dropout=dropout)
         self.steps = steps
         self.norm = nn.LayerNorm(d_model)
@@ -275,6 +319,10 @@ class YoloCTM(nn.Module):
                 raise RuntimeError("Polar spatial encoding parameters are not initialized")
             coords = self._polar_coordinates(feats.shape[-2], feats.shape[-1], inputs.device, inputs.dtype)
             inputs = inputs + self.spatial_scale * self.spatial_proj(coords).unsqueeze(0)
+        if self.token_mixer_type == "cross_scan" and feats.ndim == 4:
+            if self.cross_scan_mixer is None:
+                raise RuntimeError("Cross-scan mixer parameters are not initialized")
+            inputs = self.cross_scan_mixer(inputs, feats.shape[-2], feats.shape[-1])
         state = torch.zeros_like(inputs)
         for _ in range(self.steps):
             state = self.ctm_block(state, inputs)
@@ -531,6 +579,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--freeze-yolo-anchor", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--spatial-encoding", choices=["none", "polar"], default="none")
     parser.add_argument("--spatial-encoding-scale-init", type=float, default=0.05)
+    parser.add_argument("--token-mixer", choices=["none", "cross_scan"], default="none")
+    parser.add_argument("--scan-scale-init", type=float, default=0.05)
     parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
     parser.add_argument("--logit-bias", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logit-bias-init", choices=["zero", "prior"], default="zero")
@@ -823,6 +873,8 @@ def main() -> int:
         expert_ctm_init=float(args.expert_ctm_init),
         spatial_encoding=str(args.spatial_encoding),
         spatial_encoding_scale_init=float(args.spatial_encoding_scale_init),
+        token_mixer=str(args.token_mixer),
+        scan_scale_init=float(args.scan_scale_init),
         ctm_readout=str(args.ctm_readout),
         logit_bias=bool(args.logit_bias),
         logit_bias_init=logit_bias_init,
