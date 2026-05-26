@@ -25,6 +25,8 @@ Keep it short and operational.
 - The micro-batch retry also triggered two BSOD restarts after epoch 1 on 2026-05-25 (`BugCheck 0x3B`, dumps `C:\Windows\Minidump\052526-9562-01.dmp` and `052526-9656-01.dmp`). After consecutive BSODs, stop unattended GPU relaunches and use overnight cycles only for CPU evaluation, logging, literature review, or code preparation until hardware/driver stability is addressed.
 - A CPU-only ensemble evaluation also coincided with a further restart on 2026-05-26 at `01:05:01` (`BugCheck 0x7F`, dump `C:\Windows\Minidump\052626-9859-01.dmp`); a later retry completed, but avoid unattended long-running CPU cache generation or evaluation until system stability is addressed.
 - After the user requested continued iteration, a resumable CPU teacher-cache build wrote `4/30` parts and then the host restarted again on 2026-05-26 at `08:23:29` (`BugCheck 0x3B`, dump `C:\Windows\Minidump\052626-9843-01.dmp`). Preserve the written parts under `AutoResearch/cache/train_logprob_slim_075025_tau0025_parts/`, but do not resume long-running model computation until the host stability issue is addressed.
+- At the user's explicit request to continue, teacher-cache generation was safely completed using one CPU thread, batch `64`, atomic per-part saves, and 30-second cooldowns between parts; no new BugCheck occurred while completing the remaining `26/30` parts.
+- The GPU accepted a conservative graphics-clock lock of `300-1200 MHz` together with the `400 W` power floor on 2026-05-26; combine this with `micro_batch: 16`, gradient accumulation `4`, and epoch-level resumable checkpoints for the next controlled training attempt.
 - A CPU resume once exited during `scipy/sklearn` import with a native access violation but succeeded unchanged on immediate retry; if this occurs without a new system bugcheck, retry the CPU resume once before marking the experiment as crashed.
 - Avoid Windows scheduled tasks for this training loop unless there is no foreground option. They repeatedly exited early with status `-1073741510` or re-fired unexpectedly.
 - If the user interrupts the foreground terminal, always check local process state and `pipeline.log` before restarting.
@@ -130,7 +132,7 @@ Keep it short and operational.
 - Prepared next compression candidate as of 2026-05-26:
   - commit `cb0aee7` adds DKD loss mode and configures a single `10.502M` CTM residual adapter to distill the compact two-branch teacher.
   - rationale: DKD separates target-class confidence from non-target class relations, where the independent YOLO/CTM complementarity appears to live.
-  - required cache `AutoResearch/cache/train_logprob_slim_075025_tau0025.npz` is intentionally not generated yet because the host also restarted during a long CPU-only evaluation.
+  - required cache `AutoResearch/cache/train_logprob_slim_075025_tau0025.npz` has now been assembled from resumable low-load parts.
 
 ## Practical workflow
 

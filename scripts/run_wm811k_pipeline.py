@@ -66,8 +66,9 @@ def parse_args() -> argparse.Namespace:
         "--resume-run-dir",
         type=Path,
         default=None,
-        help="Resume evaluation/logging in an existing run directory; requires --skip-train",
+        help="Resume evaluation/logging in an existing run directory, or resume training with --train-resume-checkpoint",
     )
+    parser.add_argument("--train-resume-checkpoint", type=Path, default=None, help="Resume YoloCTM training state in an existing run")
     parser.add_argument("--eval-device", default=None, help="Override the device used for validation/test/metrics")
     parser.add_argument(
         "--prior-logit-tau",
@@ -253,7 +254,7 @@ def train_yolo_model(config: dict[str, Any], run_name: str):
     return model
 
 
-def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
+def train_yoloctm_model(config: dict[str, Any], run_name: str, resume_checkpoint: Path | None = None) -> Path:
     from train_wm811k_yoloctm import main as train_yoloctm_main
 
     dataset_config = get_section(config, "dataset")
@@ -371,6 +372,8 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
     distill_logprobs = ctm_config.get("distill_logprobs")
     if distill_logprobs:
         argv.extend(["--distill-logprobs", str(resolve_path(distill_logprobs))])
+    if resume_checkpoint is not None:
+        argv.extend(["--resume-checkpoint", str(resume_checkpoint.resolve())])
 
     original_argv = sys.argv[:]
     try:
@@ -385,10 +388,10 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str) -> Path:
     return checkpoint
 
 
-def train_model(config: dict[str, Any], run_name: str) -> dict[str, Any]:
+def train_model(config: dict[str, Any], run_name: str, resume_checkpoint: Path | None = None) -> dict[str, Any]:
     algorithm = get_model_algorithm(config)
     if algorithm == "yoloctm":
-        checkpoint = train_yoloctm_model(config, run_name)
+        checkpoint = train_yoloctm_model(config, run_name, resume_checkpoint=resume_checkpoint)
         return {"algorithm": "yoloctm", "checkpoint": checkpoint}
     return {"algorithm": "yolo", "model": train_yolo_model(config, run_name)}
 
@@ -747,8 +750,8 @@ def main() -> int:
     metrics_config = get_section(config, "metrics")
 
     if args.resume_run_dir is not None:
-        if not args.skip_train:
-            raise ValueError("--resume-run-dir requires --skip-train")
+        if not args.skip_train and args.train_resume_checkpoint is None:
+            raise ValueError("--resume-run-dir while training requires --train-resume-checkpoint")
         run_dir = resolve_path(args.resume_run_dir).resolve()
         run_name = run_dir.name
     else:
@@ -793,7 +796,8 @@ def main() -> int:
                 model_result = {"algorithm": "yolo", "model": find_best_model(run_dir, fallback_model)}
         else:
             print(f"\n[train] Training {algorithm} classification model")
-            model_result = train_model(config, run_name)
+            resume_checkpoint = resolve_path(args.train_resume_checkpoint).resolve() if args.train_resume_checkpoint else None
+            model_result = train_model(config, run_name, resume_checkpoint=resume_checkpoint)
             if algorithm == "yolo":
                 model_config_path, weights = get_model_sources(get_section(config, "model"))
                 fallback_model = weights or model_config_path or "yolo11m-cls.pt"

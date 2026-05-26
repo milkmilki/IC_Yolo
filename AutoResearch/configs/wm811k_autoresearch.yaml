@@ -51,7 +51,7 @@ train:
   epochs: 10
   imgsz: 224
   batch: 64
-  micro_batch: 32
+  micro_batch: 16
   device: "0"
   workers: 0
   sampling: natural
@@ -81,4 +81,4 @@ metrics:
 logging:
   filename: pipeline.log
   autoresearch: true
-  description: "DKD-compressed CTM residual adapter distilled from the compact 0.75*yolo26m + 0.25*ctm_adapter teacher with validation-selected class-prior logit calibration; effective batch 64 executed as micro_batch 32 x accumulation 2"
+  description: "DKD-compressed CTM residual adapter distilled from the compact 0.75*yolo26m + 0.25*ctm_adapter teacher with validation-selected class-prior logit calibration; effective batch 64 executed as micro_batch 16 x accumulation 4 for stability"

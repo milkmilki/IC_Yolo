@@ -605,6 +605,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--project", default="runs/classify")
     parser.add_argument("--name", default="wm811k_yoloctm")
+    parser.add_argument("--resume-checkpoint", type=Path, default=None, help="Resume training state from last_yoloctm.pt")
     return parser.parse_args()
 
 
@@ -963,7 +964,50 @@ def main() -> int:
     best_val_f1 = 0.0
     best_val_acc = 0.0
     history: list[dict[str, float]] = []
-    for epoch in range(1, args.epochs + 1):
+    start_epoch = 1
+    if args.resume_checkpoint is not None:
+        try:
+            resumed = torch.load(args.resume_checkpoint, map_location=device, weights_only=False)
+        except TypeError:
+            resumed = torch.load(args.resume_checkpoint, map_location=device)
+        if list(resumed.get("classes", [])) != list(train_ds.classes):
+            raise ValueError("Resume checkpoint classes do not match the current training dataset")
+        model.load_state_dict(resumed["model_state"], strict=True)
+        optimizer.load_state_dict(resumed["optimizer_state"])
+        best_val_f1 = float(resumed.get("best_val_macro_f1", 0.0))
+        best_val_acc = float(resumed.get("best_val_acc", 0.0))
+        history = list(resumed.get("history", []))
+        start_epoch = int(resumed["epoch"]) + 1
+        print(
+            f"[resume] checkpoint={args.resume_checkpoint} completed_epoch={start_epoch - 1} "
+            f"best_val_macro_f1={best_val_f1:.4f}"
+        )
+
+    def checkpoint_payload(include_optimizer: bool, epoch: int) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "model_state": model.state_dict(),
+            "classes": train_ds.classes,
+            "args": vars(args),
+            "in_dim": in_dim,
+            "architecture": (
+                f"yolo_head_{args.feature_fusion}_shared_ctm_{args.ctm_readout}_readout_"
+                "feature_adapter_macro_f1_selected"
+                if args.feature_adapter
+                else f"yolo_head_residual_shared_ctm_{args.ctm_readout}_readout_macro_f1_selected"
+            ),
+            "best_val_acc": best_val_acc,
+            "best_val_macro_f1": best_val_f1,
+            "classifier_cbr_weight": float(args.classifier_cbr_weight),
+            "classifier_cbr_power": float(args.classifier_cbr_power),
+            "classifier_cbr_start_epoch": int(args.classifier_cbr_start_epoch),
+            "epoch": epoch,
+            "history": history,
+        }
+        if include_optimizer:
+            payload["optimizer_state"] = optimizer.state_dict()
+        return payload
+
+    for epoch in range(start_epoch, args.epochs + 1):
         classifier_cbr_weight = (
             float(args.classifier_cbr_weight)
             if epoch >= int(args.classifier_cbr_start_epoch)
@@ -1007,26 +1051,8 @@ def main() -> int:
         if val_macro_f1 > best_val_f1:
             best_val_f1 = val_macro_f1
             best_val_acc = val_acc
-            torch.save(
-                {
-                    "model_state": model.state_dict(),
-                    "classes": train_ds.classes,
-                    "args": vars(args),
-                    "in_dim": in_dim,
-                    "architecture": (
-                        f"yolo_head_{args.feature_fusion}_shared_ctm_{args.ctm_readout}_readout_"
-                        "feature_adapter_macro_f1_selected"
-                        if args.feature_adapter
-                        else f"yolo_head_residual_shared_ctm_{args.ctm_readout}_readout_macro_f1_selected"
-                    ),
-                    "best_val_acc": best_val_acc,
-                    "best_val_macro_f1": best_val_f1,
-                    "classifier_cbr_weight": float(args.classifier_cbr_weight),
-                    "classifier_cbr_power": float(args.classifier_cbr_power),
-                    "classifier_cbr_start_epoch": int(args.classifier_cbr_start_epoch),
-                },
-                out_dir / "best_yoloctm.pt",
-            )
+            torch.save(checkpoint_payload(include_optimizer=False, epoch=epoch), out_dir / "best_yoloctm.pt")
+        torch.save(checkpoint_payload(include_optimizer=True, epoch=epoch), out_dir / "last_yoloctm.pt")
 
     with (out_dir / "metrics.json").open("w", encoding="utf-8") as f:
         json.dump(
