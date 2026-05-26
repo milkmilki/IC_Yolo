@@ -147,6 +147,7 @@ Keep it short and operational.
 - Next distillation direction selected after the failed logit-standardization trial:
   - prepare DIST relational distillation following Huang et al., NeurIPS 2022, `https://proceedings.neurips.cc/paper_files/paper/2022/hash/da669dfd3c36c93905a17ddba01eef06-Abstract-Conference.html`.
   - rationale: DIST is designed for stronger teachers and transfers inter-class/intra-class prediction relations rather than forcing exact softened logits; this matches a compact ensemble teacher and avoids the confidence-scale destruction observed above.
+  - implemented as `distill_mode: dist` using the existing compact-teacher cache; the Pearson relation loss matches the authors' released `DIST` implementation, and CPU syntax/config/loss-gradient preflights passed. Do not launch alongside another computation.
 
 ## Practical workflow
 

@@ -593,7 +593,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--distill-logprobs", type=Path, default=None, help="Optional NPZ with train-split teacher log-probabilities")
     parser.add_argument("--distill-weight", type=float, default=0.0)
     parser.add_argument("--distill-temperature", type=float, default=2.0)
-    parser.add_argument("--distill-mode", choices=["full", "nontarget_zscore", "dkd", "dkd_logit_std"], default="full")
+    parser.add_argument("--distill-mode", choices=["full", "nontarget_zscore", "dkd", "dkd_logit_std", "dist"], default="full")
     parser.add_argument("--classifier-cbr-weight", type=float, default=0.0)
     parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
@@ -625,6 +625,15 @@ def _collapse_target_distribution(probs: torch.Tensor, labels: torch.Tensor) -> 
     return torch.cat([target, 1.0 - target], dim=1)
 
 
+def _pearson_distance(a: torch.Tensor, b: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
+    a_centered = a - a.mean(dim=1, keepdim=True)
+    b_centered = b - b.mean(dim=1, keepdim=True)
+    similarity = (a_centered * b_centered).sum(dim=1) / (
+        a_centered.norm(dim=1) * b_centered.norm(dim=1) + eps
+    )
+    return 1.0 - similarity.mean()
+
+
 def distillation_loss(
     logits: torch.Tensor,
     teacher_log_probs: torch.Tensor,
@@ -634,6 +643,12 @@ def distillation_loss(
 ) -> torch.Tensor:
     temperature = max(float(temperature), 1e-6)
     mode = str(mode).lower()
+    if mode == "dist":
+        student_probs = F.softmax(logits / temperature, dim=1)
+        teacher_probs = F.softmax(teacher_log_probs / temperature, dim=1)
+        inter_class_loss = _pearson_distance(student_probs, teacher_probs)
+        intra_class_loss = _pearson_distance(student_probs.transpose(0, 1), teacher_probs.transpose(0, 1))
+        return (inter_class_loss + intra_class_loss) * temperature * temperature
     if mode in {"dkd", "dkd_logit_std"}:
         if labels is None:
             raise ValueError("labels are required for DKD distillation")

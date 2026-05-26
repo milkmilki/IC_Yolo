@@ -32,7 +32,7 @@ model:
     distill_logprobs: AutoResearch/cache/train_logprob_slim_075025_tau0025.npz
     distill_weight: 0.25
     distill_temperature: 2.0
-    distill_mode: dkd_logit_std
+    distill_mode: dist
     classifier_cbr_weight: 0.0
     classifier_cbr_power: 1.0
     classifier_cbr_start_epoch: 1
@@ -59,7 +59,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_slim_dkd_logitstd_priorcal
+  name: autoresearch_yoloctm_slim_dist_priorcal
   add_timestamp: true
   exist_ok: true
 
@@ -81,4 +81,4 @@ metrics:
 logging:
   filename: pipeline.log
   autoresearch: true
-  description: "Logit-Standardization DKD CTM residual adapter distilled from the compact 0.75*yolo26m + 0.25*ctm_adapter teacher with validation-selected class-prior logit calibration; preserves model size while normalizing teacher-student confidence scale; effective batch 64 executed as micro_batch 16 x accumulation 4 for stability"
+  description: "DIST relationally distilled CTM residual adapter from the compact 0.75*yolo26m + 0.25*ctm_adapter teacher with validation-selected class-prior logit calibration; transfers inter-class and intra-class prediction relations without adding inference parameters; effective batch 64 executed as micro_batch 16 x accumulation 4 for stability"
