@@ -143,6 +143,10 @@ Keep it short and operational.
   - add Logit Standardization to DKD following Sun et al., CVPR 2024, `https://openaccess.thecvf.com/content/CVPR2024/html/Sun_Logit_Standardization_in_Knowledge_Distillation_CVPR_2024_paper.html`.
   - rationale: standardized teacher/student logits preserve class relations without forcing a compact student to match ensemble confidence magnitude; it adds no inference parameters and directly targets the remaining precision gap.
   - implemented as `distill_mode: dkd_logit_std` with the same compact-ensemble teacher cache and fixed protocol; CPU syntax/config and loss-gradient preflights passed before launching training.
+  - result: discard `autoresearch_yoloctm_slim_dkd_logitstd_priorcal_20260526_134214`, params `10.525M`, test acc `0.97814`, macro P `0.90043`, macro R `0.83911`, macro F1 `0.86118`; normalization severely reduced minority recall, especially `Scratch` and `Near-full`.
+- Next distillation direction selected after the failed logit-standardization trial:
+  - prepare DIST relational distillation following Huang et al., NeurIPS 2022, `https://proceedings.neurips.cc/paper_files/paper/2022/hash/da669dfd3c36c93905a17ddba01eef06-Abstract-Conference.html`.
+  - rationale: DIST is designed for stronger teachers and transfers inter-class/intra-class prediction relations rather than forcing exact softened logits; this matches a compact ensemble teacher and avoids the confidence-scale destruction observed above.
 
 ## Practical workflow
 
