@@ -27,6 +27,7 @@ Keep it short and operational.
 - After the user requested continued iteration, a resumable CPU teacher-cache build wrote `4/30` parts and then the host restarted again on 2026-05-26 at `08:23:29` (`BugCheck 0x3B`, dump `C:\Windows\Minidump\052626-9843-01.dmp`). Preserve the written parts under `AutoResearch/cache/train_logprob_slim_075025_tau0025_parts/`, but do not resume long-running model computation until the host stability issue is addressed.
 - At the user's explicit request to continue, teacher-cache generation was safely completed using one CPU thread, batch `64`, atomic per-part saves, and 30-second cooldowns between parts; no new BugCheck occurred while completing the remaining `26/30` parts.
 - The GPU accepted a conservative graphics-clock lock of `300-1200 MHz` together with the `400 W` power floor on 2026-05-26; combine this with `micro_batch: 16`, gradient accumulation `4`, and epoch-level resumable checkpoints for the next controlled training attempt.
+- The controlled DKD run and its CPU evaluation completed on 2026-05-26 without a new BugCheck using `400 W`, graphics-clock lock `300-1200 MHz`, `micro_batch: 16`, gradient accumulation `4`, and resumable epoch checkpoints. Continue to check system events after each compute phase because this is a mitigation, not a root-cause fix.
 - A CPU resume once exited during `scipy/sklearn` import with a native access violation but succeeded unchanged on immediate retry; if this occurs without a new system bugcheck, retry the CPU resume once before marking the experiment as crashed.
 - Avoid Windows scheduled tasks for this training loop unless there is no foreground option. They repeatedly exited early with status `-1073741510` or re-fired unexpectedly.
 - If the user interrupts the foreground terminal, always check local process state and `pipeline.log` before restarting.
@@ -129,10 +130,18 @@ Keep it short and operational.
   - test macro R `0.89192`
   - test macro F1 `0.90436`
   - key lesson: removing the low-rank third ensemble branch saves `10.496M` parameters while retaining a clear F1 gain over either single model; future compression work should target the two-branch complementarity first.
-- Prepared next compression candidate as of 2026-05-26:
-  - commit `cb0aee7` adds DKD loss mode and configures a single `10.502M` CTM residual adapter to distill the compact two-branch teacher.
-  - rationale: DKD separates target-class confidence from non-target class relations, where the independent YOLO/CTM complementarity appears to live.
-  - required cache `AutoResearch/cache/train_logprob_slim_075025_tau0025.npz` has now been assembled from resumable low-load parts.
+- Best single YoloCTM as of 2026-05-26:
+  - `autoresearch_yoloctm_slim_dkd_priorcal_20260526_120641`
+  - teacher: fixed `0.75*yolo26m + 0.25*ctm_adapter + prior_tau=0.025` compact ensemble
+  - params `10.525M`
+  - test acc `0.98138`
+  - test macro P `0.90203`
+  - test macro R `0.90150`
+  - test macro F1 `0.89990`
+  - key lesson: DKD transfers part of the two-branch complementarity into one CTM residual adapter, improving `Scratch`, `Edge-Loc`, `Loc`, and `Random` while surpassing the prior single-model F1 by `0.00155` at the same size.
+- Next compression direction selected on 2026-05-26:
+  - add Logit Standardization to DKD following Sun et al., CVPR 2024, `https://openaccess.thecvf.com/content/CVPR2024/html/Sun_Logit_Standardization_in_Knowledge_Distillation_CVPR_2024_paper.html`.
+  - rationale: standardized teacher/student logits preserve class relations without forcing a compact student to match ensemble confidence magnitude; it adds no inference parameters and directly targets the remaining precision gap.
 
 ## Practical workflow
 
