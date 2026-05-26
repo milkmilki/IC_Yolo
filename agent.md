@@ -18,8 +18,8 @@ Keep it short and operational.
 
 - For an agent-held run, use a direct SSH foreground command with an adequate timeout and keep that session alive until the GPU phase completes.
 - A remote `Start-Process` test on 2026-05-25 created the run directory but exited before runtime/epoch output as soon as the launching session ended. Treat detached `Start-Process` as unreliable for this loop; do not use it for training.
-- Because GPU evaluation triggered a BSOD after a completed train, run GPU training with `--skip-val --skip-test --skip-metrics`, then resume metrics on CPU in the same run directory.
-- A direct SSH foreground GPU phase held open by the agent completed successfully on 2026-05-25 at a `400 W` power limit; use this method for subsequent runs and perform the CPU resume step afterward.
+- A prior GPU evaluation triggered a BSOD after a completed train, so the campaign temporarily used CPU metrics. On 2026-05-26 the user explicitly requested GPU test/metric evaluation for speed; run it only with no concurrent model process and after explicitly applying `nvidia-smi -pl 400` plus `nvidia-smi -lgc 300,1200`, then inspect BugCheck events afterward.
+- A direct SSH foreground GPU phase held open by the agent completed successfully on 2026-05-25 at a `400 W` power limit; use this held-session method for both subsequent training and user-authorized controlled GPU evaluation.
 - The GPU reports `400 W` as its minimum configurable power limit. A cross-scan run still BSODed after epoch 7 at this floor on 2026-05-25 (`BugCheck 0x1E`, dump `C:\Windows\Minidump\052526-9703-01.dmp`); do not treat the power cap alone as sufficient protection.
 - For retries after this crash, preserve effective `batch: 64` while reducing instantaneous load with `micro_batch: 32` and two-step gradient accumulation.
 - The micro-batch retry also triggered two BSOD restarts after epoch 1 on 2026-05-25 (`BugCheck 0x3B`, dumps `C:\Windows\Minidump\052526-9562-01.dmp` and `052526-9656-01.dmp`). After consecutive BSODs, stop unattended GPU relaunches and use overnight cycles only for CPU evaluation, logging, literature review, or code preparation until hardware/driver stability is addressed.
@@ -148,12 +148,13 @@ Keep it short and operational.
   - prepare DIST relational distillation following Huang et al., NeurIPS 2022, `https://proceedings.neurips.cc/paper_files/paper/2022/hash/da669dfd3c36c93905a17ddba01eef06-Abstract-Conference.html`.
   - rationale: DIST is designed for stronger teachers and transfers inter-class/intra-class prediction relations rather than forcing exact softened logits; this matches a compact ensemble teacher and avoids the confidence-scale destruction observed above.
   - implemented as `distill_mode: dist` using the existing compact-teacher cache; the Pearson relation loss matches the authors' released `DIST` implementation, and CPU syntax/config/loss-gradient preflights passed. Do not launch alongside another computation.
+  - result: discard `autoresearch_yoloctm_slim_dist_priorcal_20260526_162704`, params `10.525M`, test acc `0.97891`, macro P `0.89102`, macro R `0.87230`, macro F1 `0.87851`; relational loss did not retain the DKD student's `Loc`, `Scratch`, and `Near-full` balance.
 
 ## Practical workflow
 
 1. Check `AutoResearch/results.tsv` first.
 2. If the latest run is unclear, inspect the local development-machine `pipeline.log`.
-3. If the run finished but metrics are missing, run validation/test from the development machine.
+3. If the run finished but metrics are missing, run validation/test from the development machine on controlled GPU (`--eval-device 0`) after reapplying the power/clock limits and verifying there is no concurrent process.
 4. After every run, make sure both:
    - `AutoResearch/results.tsv` has a row
    - `AutoResearch/logs/` has a JSON summary
