@@ -3,36 +3,25 @@
 This file records the practical runbook learned from the latest WM811K AutoResearch runs.
 Keep it short and operational.
 
-## Remote development-host execution
+## Local development-host execution
 
-- As of 2026-05-25, the user explicitly authorized the agent to start subsequent experiment cycles remotely instead of asking the user to execute commands.
-- Use SSH to the development machine (`du@10.129.136.178`) and execute against its local project path; do not run GPU training against the mounted `R:` drive path.
+- The user starts long training and evaluation from a visible terminal opened directly on the development machine.
+- Do not launch training or evaluation by wrapping commands through SSH from a mounted network-drive view.
+- Do not use detached `Start-Process` or scheduled tasks for long experiment runs.
 - Treat the project as local on the development machine:
   - `E:\Cjn\PCB_Yolo`
 - Prefer the project Python explicitly:
   - `D:\anaconda3\envs\pcb_yolo\python.exe`
 - If working from `cmd`, use `cd /d E:\Cjn\PCB_Yolo`.
 - If working from PowerShell, use `Set-Location E:\Cjn\PCB_Yolo`.
+- An agent may inspect visible run artifacts, record completed results, implement one next candidate, and provide a launch command; it must not start a second computation while a user-launched run may be active.
 
-## Stable launch
+## Stability Notes
 
-- For an agent-held run, use a direct SSH foreground command with an adequate timeout and keep that session alive until the GPU phase completes.
-- A remote `Start-Process` test on 2026-05-25 created the run directory but exited before runtime/epoch output as soon as the launching session ended. Treat detached `Start-Process` as unreliable for this loop; do not use it for training.
-- When a local held `Start-Process ssh.exe` launches the remote foreground command, pass a Base64 `powershell -EncodedCommand` script. A quoted `cmd /c "cd /d ... && python ..."` launch on 2026-05-26 applied GPU limits but lost the project directory and immediately tried to open `C:\Users\dsfhg\scripts\run_wm811k_pipeline.py`.
-- A prior GPU evaluation triggered a BSOD after a completed train, so the campaign temporarily used CPU metrics. On 2026-05-26 the user explicitly requested GPU test/metric evaluation for speed; run it only with no concurrent model process and after explicitly applying `nvidia-smi -pl 400` plus `nvidia-smi -lgc 300,1200`, then inspect BugCheck events afterward.
-- A direct SSH foreground GPU phase held open by the agent completed successfully on 2026-05-25 at a `400 W` power limit; use this held-session method for both subsequent training and user-authorized controlled GPU evaluation.
-- The GPU reports `400 W` as its minimum configurable power limit. A cross-scan run still BSODed after epoch 7 at this floor on 2026-05-25 (`BugCheck 0x1E`, dump `C:\Windows\Minidump\052526-9703-01.dmp`); do not treat the power cap alone as sufficient protection.
-- For retries after this crash, preserve effective `batch: 64` while reducing instantaneous load with `micro_batch: 32` and two-step gradient accumulation.
-- The micro-batch retry also triggered two BSOD restarts after epoch 1 on 2026-05-25 (`BugCheck 0x3B`, dumps `C:\Windows\Minidump\052526-9562-01.dmp` and `052526-9656-01.dmp`). After consecutive BSODs, stop unattended GPU relaunches and use overnight cycles only for CPU evaluation, logging, literature review, or code preparation until hardware/driver stability is addressed.
-- A CPU-only ensemble evaluation also coincided with a further restart on 2026-05-26 at `01:05:01` (`BugCheck 0x7F`, dump `C:\Windows\Minidump\052626-9859-01.dmp`); a later retry completed, but avoid unattended long-running CPU cache generation or evaluation until system stability is addressed.
-- After the user requested continued iteration, a resumable CPU teacher-cache build wrote `4/30` parts and then the host restarted again on 2026-05-26 at `08:23:29` (`BugCheck 0x3B`, dump `C:\Windows\Minidump\052626-9843-01.dmp`). Preserve the written parts under `AutoResearch/cache/train_logprob_slim_075025_tau0025_parts/`, but do not resume long-running model computation until the host stability issue is addressed.
-- At the user's explicit request to continue, teacher-cache generation was safely completed using one CPU thread, batch `64`, atomic per-part saves, and 30-second cooldowns between parts; no new BugCheck occurred while completing the remaining `26/30` parts.
-- The GPU accepted a conservative graphics-clock lock of `300-1200 MHz` together with the `400 W` power floor on 2026-05-26; combine this with `micro_batch: 16`, gradient accumulation `4`, and epoch-level resumable checkpoints for the next controlled training attempt.
-- The controlled DKD run and its CPU evaluation completed on 2026-05-26 without a new BugCheck using `400 W`, graphics-clock lock `300-1200 MHz`, `micro_batch: 16`, gradient accumulation `4`, and resumable epoch checkpoints. Continue to check system events after each compute phase because this is a mitigation, not a root-cause fix.
-- On 2026-05-26 night, the user explicitly authorized uninterrupted autonomous iteration even if a run triggers another system crash. For subsequent crash recovery: wait until SSH is reachable, log the BugCheck/run interruption, reapply `400 W` and `300-1200 MHz`, resume the same run from `last_yoloctm.pt` when present, or relaunch the same candidate only when no resumable checkpoint exists; never create concurrent compute jobs.
-- A CPU resume once exited during `scipy/sklearn` import with a native access violation but succeeded unchanged on immediate retry; if this occurs without a new system bugcheck, retry the CPU resume once before marking the experiment as crashed.
-- Avoid Windows scheduled tasks for this training loop unless there is no foreground option. They repeatedly exited early with status `-1073741510` or re-fired unexpectedly.
-- If the user interrupts the foreground terminal, always check local process state and `pipeline.log` before restarting.
+- The development host has suffered repeated BugCheck restarts during earlier GPU and CPU phases. A `400 W` power floor and `300-1200 MHz` graphics-clock lock mitigated but did not prove a root-cause fix.
+- The completed DKD experiment used effective batch `64` as `micro_batch: 16` with gradient accumulation `4`, plus resumable epoch checkpoints.
+- Preserve `last_yoloctm.pt` from interrupted runs; if the user chooses to resume a run, resume the same candidate rather than starting a concurrent duplicate.
+- If the user interrupts a foreground terminal, always check local process state and `pipeline.log` before restarting.
 
 ## Foreground health check
 
