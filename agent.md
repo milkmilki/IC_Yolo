@@ -142,6 +142,7 @@ Keep it short and operational.
 - Next compression direction selected on 2026-05-26:
   - add Logit Standardization to DKD following Sun et al., CVPR 2024, `https://openaccess.thecvf.com/content/CVPR2024/html/Sun_Logit_Standardization_in_Knowledge_Distillation_CVPR_2024_paper.html`.
   - rationale: standardized teacher/student logits preserve class relations without forcing a compact student to match ensemble confidence magnitude; it adds no inference parameters and directly targets the remaining precision gap.
+  - implemented as `distill_mode: dkd_logit_std` with the same compact-ensemble teacher cache and fixed protocol; CPU syntax/config and loss-gradient preflights passed before launching training.
 
 ## Practical workflow
 

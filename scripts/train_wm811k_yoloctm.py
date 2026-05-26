@@ -593,7 +593,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--distill-logprobs", type=Path, default=None, help="Optional NPZ with train-split teacher log-probabilities")
     parser.add_argument("--distill-weight", type=float, default=0.0)
     parser.add_argument("--distill-temperature", type=float, default=2.0)
-    parser.add_argument("--distill-mode", choices=["full", "nontarget_zscore", "dkd"], default="full")
+    parser.add_argument("--distill-mode", choices=["full", "nontarget_zscore", "dkd", "dkd_logit_std"], default="full")
     parser.add_argument("--classifier-cbr-weight", type=float, default=0.0)
     parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
@@ -634,9 +634,14 @@ def distillation_loss(
 ) -> torch.Tensor:
     temperature = max(float(temperature), 1e-6)
     mode = str(mode).lower()
-    if mode == "dkd":
+    if mode in {"dkd", "dkd_logit_std"}:
         if labels is None:
-            raise ValueError("labels are required for dkd distillation")
+            raise ValueError("labels are required for DKD distillation")
+        if mode == "dkd_logit_std":
+            # A cached log-probability differs from its source logits by one
+            # per-sample scalar, so full-class z-score normalization is preserved.
+            logits = _zscore(logits)
+            teacher_log_probs = _zscore(teacher_log_probs)
         student_scaled = logits / temperature
         teacher_scaled = teacher_log_probs / temperature
         student_probs = F.softmax(student_scaled, dim=1)
