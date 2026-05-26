@@ -149,6 +149,10 @@ Keep it short and operational.
   - rationale: DIST is designed for stronger teachers and transfers inter-class/intra-class prediction relations rather than forcing exact softened logits; this matches a compact ensemble teacher and avoids the confidence-scale destruction observed above.
   - implemented as `distill_mode: dist` using the existing compact-teacher cache; the Pearson relation loss matches the authors' released `DIST` implementation, and CPU syntax/config/loss-gradient preflights passed. Do not launch alongside another computation.
   - result: discard `autoresearch_yoloctm_slim_dist_priorcal_20260526_162704`, params `10.525M`, test acc `0.97891`, macro P `0.89102`, macro R `0.87230`, macro F1 `0.87851`; relational loss did not retain the DKD student's `Loc`, `Scratch`, and `Near-full` balance.
+- Next high-performance candidate selected after DIST:
+  - combine the successful compact-ensemble DKD objective with the implemented VMamba-inspired shared cross-scan CTM token mixer (`token_mixer: cross_scan`), following Liu et al., VMamba, `https://arxiv.org/abs/2401.10166`.
+  - rationale: both loss replacements degraded minority-class balance; cross-scan instead adds a small spatial structural prior to the best DKD student, and its previous non-DKD trial was interrupted by system crashes before it could be evaluated.
+  - keep the controlled `micro_batch: 16` x accumulation `4` launch, `400 W` power limit, `300,1200` GPU clock lock, resumable checkpoints, and user-authorized controlled GPU test/metric evaluation.
 
 ## Practical workflow
 
