@@ -157,6 +157,11 @@ Keep it short and operational.
   - use the successful trainable CTM residual adapter and DKD objective with the stronger three-branch teacher cache `AutoResearch/cache/train_logprob_ensemble_060202_tau0025.npz` (teacher test macro F1 `0.91183`) instead of the slim two-branch teacher (`0.90436`).
   - rationale: ordinary KD from this teacher previously lost recall, but DKD is the only tested transfer loss that improved a single model; this isolates whether stronger teacher complementarity improves the same `10.525M` student without adding inference parameters.
   - logging now supports `status: auto` against the current best single-model test macro F1 `0.899897`, preventing validation-only gains from being marked as keeps.
+  - result: discard `autoresearch_yoloctm_fullensemble_dkd_priorcal_20260527_125435`, params `10.525M`, test acc `0.98096`, macro P `0.91789`, macro R `0.88208`, macro F1 `0.89794`; stronger teacher improved tail recall relative to frozen/cross-scan trials but did not exceed slim-teacher DKD.
+- Next primary-paper-motivated representation candidate selected on 2026-05-27:
+  - add a BCL-inspired class-complement prototype auxiliary objective to the best slim-teacher DKD adapter, based on Zhu et al., CVPR 2022, `https://openaccess.thecvf.com/content/CVPR2022/html/Zhu_Balanced_Contrastive_Learning_for_Long-Tailed_Visual_Recognition_CVPR_2022_paper.html`.
+  - implementation scope: normalized pooled CTM embeddings contrast against the existing CTM classifier rows as all-class prototypes (`prototype_bcl_weight: 0.05`, `temperature: 0.1`); training-only objective, zero added inference parameters, and explicitly an adaptation rather than a full dual-view BCL reproduction.
+  - rationale: recent failures either over-raised precision or constrained minority correction; a class-complement representation target directly addresses `Loc` and `Random` separation under small micro-batches while retaining successful DKD.
 
 ## Practical workflow
 

@@ -307,6 +307,7 @@ class YoloCTM(nn.Module):
         images: torch.Tensor,
         return_aux: bool = False,
         return_clean: bool = False,
+        return_embedding: bool = False,
     ) -> torch.Tensor | tuple[torch.Tensor, ...]:
         feats = self.backbone(images)
         if feats.ndim == 2:
@@ -363,17 +364,16 @@ class YoloCTM(nn.Module):
             )
         if self.logit_bias is not None:
             logits = logits + self.logit_bias.view(1, -1)
-        if return_aux and return_clean:
-            if clean_yolo_logits is None:
-                raise RuntimeError("clean_yolo_logits was not computed")
-            return logits, ctm_logits, clean_yolo_logits
+        outputs = [logits]
         if return_aux:
-            return logits, ctm_logits
+            outputs.append(ctm_logits)
         if return_clean:
             if clean_yolo_logits is None:
                 raise RuntimeError("clean_yolo_logits was not computed")
-            return logits, clean_yolo_logits
-        return logits
+            outputs.append(clean_yolo_logits)
+        if return_embedding:
+            outputs.append(pooled)
+        return outputs[0] if len(outputs) == 1 else tuple(outputs)
 
     def _pool_ctm_state(self, state: torch.Tensor) -> torch.Tensor:
         if self.ctm_readout == "mean":
@@ -594,6 +594,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--distill-weight", type=float, default=0.0)
     parser.add_argument("--distill-temperature", type=float, default=2.0)
     parser.add_argument("--distill-mode", choices=["full", "nontarget_zscore", "dkd", "dkd_logit_std", "dist"], default="full")
+    parser.add_argument("--prototype-bcl-weight", type=float, default=0.0)
+    parser.add_argument("--prototype-bcl-temperature", type=float, default=0.1)
     parser.add_argument("--classifier-cbr-weight", type=float, default=0.0)
     parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
@@ -694,6 +696,18 @@ def distillation_loss(
     return F.kl_div(student_log_probs, teacher_probs, reduction="batchmean") * temperature * temperature
 
 
+def prototype_complement_loss(
+    embeddings: torch.Tensor,
+    prototypes: torch.Tensor,
+    labels: torch.Tensor,
+    temperature: float,
+) -> torch.Tensor:
+    """BCL-inspired class-complement loss using classifier rows as class prototypes."""
+    temperature = max(float(temperature), 1e-6)
+    similarities = F.normalize(embeddings, dim=1) @ F.normalize(prototypes, dim=1).transpose(0, 1)
+    return F.cross_entropy(similarities / temperature, labels)
+
+
 def classifier_cbr_loss(model: nn.Module, class_counts: torch.Tensor, power: float = 1.0) -> torch.Tensor:
     weights: list[torch.Tensor] = []
     yolo_linear = getattr(getattr(model, "yolo_head", None), "linear", None)
@@ -759,6 +773,8 @@ def train_one_epoch(
     distill_weight: float = 0.0,
     distill_temperature: float = 2.0,
     distill_mode: str = "full",
+    prototype_bcl_weight: float = 0.0,
+    prototype_bcl_temperature: float = 0.1,
     class_counts: torch.Tensor | None = None,
     classifier_cbr_weight: float = 0.0,
     classifier_cbr_power: float = 1.0,
@@ -774,19 +790,30 @@ def train_one_epoch(
     for batch_index, batch in enumerate(loader):
         images, labels, indices = unpack_batch(batch)
         images, labels = images.to(device), labels.to(device)
+        need_embedding = float(prototype_bcl_weight) > 0
+        embedding = None
         if aux_loss_weight > 0 and anchor_loss_weight > 0:
-            logits, ctm_logits, clean_logits = model(images, return_aux=True, return_clean=True)
+            outputs = model(images, return_aux=True, return_clean=True, return_embedding=need_embedding)
+            logits, ctm_logits, clean_logits = outputs[:3]
+            embedding = outputs[-1] if need_embedding else None
             loss = (
                 criterion(logits, labels)
                 + aux_loss_weight * criterion(ctm_logits, labels)
                 + anchor_loss_weight * anchor_kl_loss(logits, clean_logits)
             )
         elif aux_loss_weight > 0:
-            logits, ctm_logits = model(images, return_aux=True)
+            outputs = model(images, return_aux=True, return_embedding=need_embedding)
+            logits, ctm_logits = outputs[:2]
+            embedding = outputs[-1] if need_embedding else None
             loss = criterion(logits, labels) + aux_loss_weight * criterion(ctm_logits, labels)
         elif anchor_loss_weight > 0:
-            logits, clean_logits = model(images, return_clean=True)
+            outputs = model(images, return_clean=True, return_embedding=need_embedding)
+            logits, clean_logits = outputs[:2]
+            embedding = outputs[-1] if need_embedding else None
             loss = criterion(logits, labels) + anchor_loss_weight * anchor_kl_loss(logits, clean_logits)
+        elif need_embedding:
+            logits, embedding = model(images, return_embedding=True)
+            loss = criterion(logits, labels)
         else:
             logits = model(images)
             loss = criterion(logits, labels)
@@ -798,6 +825,15 @@ def train_one_epoch(
                 distill_temperature,
                 labels=labels,
                 mode=distill_mode,
+            )
+        if need_embedding:
+            if embedding is None or not isinstance(getattr(model, "ctm_cls", None), nn.Linear):
+                raise RuntimeError("prototype complement loss requires CTM embeddings and classifier prototypes")
+            loss = loss + float(prototype_bcl_weight) * prototype_complement_loss(
+                embedding,
+                model.ctm_cls.weight,
+                labels,
+                prototype_bcl_temperature,
             )
         if class_counts is not None and classifier_cbr_weight > 0:
             loss = loss + float(classifier_cbr_weight) * classifier_cbr_loss(
@@ -972,6 +1008,11 @@ def main() -> int:
             f"weight={float(args.distill_weight):.4f} temperature={float(args.distill_temperature):.4f} "
             f"mode={args.distill_mode}"
         )
+    if float(args.prototype_bcl_weight) > 0:
+        print(
+            f"[prototype_bcl] weight={float(args.prototype_bcl_weight):.4f} "
+            f"temperature={float(args.prototype_bcl_temperature):.4f}"
+        )
     if float(args.classifier_cbr_weight) > 0:
         print(
             f"[cbr] classifier regularization weight={float(args.classifier_cbr_weight):.4f} "
@@ -1050,6 +1091,8 @@ def main() -> int:
             distill_weight=float(args.distill_weight),
             distill_temperature=float(args.distill_temperature),
             distill_mode=str(args.distill_mode),
+            prototype_bcl_weight=float(args.prototype_bcl_weight),
+            prototype_bcl_temperature=float(args.prototype_bcl_temperature),
             class_counts=class_counts,
             classifier_cbr_weight=classifier_cbr_weight,
             classifier_cbr_power=float(args.classifier_cbr_power),
