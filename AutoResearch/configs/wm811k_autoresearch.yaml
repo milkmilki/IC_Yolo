@@ -29,7 +29,7 @@ model:
     logit_bias_init: zero
     logit_bias_prior_tau: 0.4
     anchor_loss_weight: 0.0
-    distill_logprobs: AutoResearch/cache/train_logprob_slim_075025_tau0025.npz
+    distill_logprobs: AutoResearch/cache/train_logprob_ensemble_060202_tau0025.npz
     distill_weight: 0.25
     distill_temperature: 2.0
     distill_mode: dkd
@@ -63,7 +63,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_slim_dkd_ema_calselect_priorcal
+  name: autoresearch_yoloctm_fullensemble_dkd_ema_calselect_priorcal
   add_timestamp: true
   exist_ok: true
 
@@ -85,5 +85,5 @@ logging:
   filename: pipeline.log
   autoresearch: true
   status: auto
-  keep_val_macro_f1_min: 0.9033090178395459
-  description: "Development-only screening: EMA-averaged (decay=0.999) slim-teacher DKD CTM residual adapter with calibration-aware checkpoint selection at fixed validation prior-logit tau=0.1; no test-set evaluation and zero added inference parameters"
+  keep_val_macro_f1_min: 0.9185237871504248
+  description: "Development-only screening: EMA-averaged (decay=0.999) DKD CTM residual adapter distilled from the stronger fixed three-branch teacher, with fixed validation prior-logit tau=0.1; no test-set evaluation and zero added inference parameters"

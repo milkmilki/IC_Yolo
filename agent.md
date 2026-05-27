@@ -133,6 +133,15 @@ Keep it short and operational.
   - test macro R `0.90150`
   - test macro F1 `0.89990`
   - key lesson: DKD transfers part of the two-branch complementarity into one CTM residual adapter, improving `Scratch`, `Edge-Loc`, `Loc`, and `Random` while surpassing the prior single-model F1 by `0.00155` at the same size.
+- Best frozen milestone single YoloCTM as of 2026-05-27:
+  - `autoresearch_yoloctm_slim_dkd_ema_calselect_priorcal_20260527_175645`
+  - selection protocol: promoted using fixed-`tau=0.1` validation macro F1 `0.918524`, then evaluated exactly once on the test lockbox.
+  - params `10.525M`
+  - test acc `0.98242`
+  - test macro P `0.91093`
+  - test macro R `0.92941`
+  - test macro F1 `0.91878`
+  - key lesson: EMA-exported weights substantially stabilized the successful slim-DKD student under the validation-only promotion rule. This test result is frozen for reporting and must not guide routine candidate selection.
 - Next compression direction selected on 2026-05-26:
   - add Logit Standardization to DKD following Sun et al., CVPR 2024, `https://openaccess.thecvf.com/content/CVPR2024/html/Sun_Logit_Standardization_in_Knowledge_Distillation_CVPR_2024_paper.html`.
   - rationale: standardized teacher/student logits preserve class relations without forcing a compact student to match ensemble confidence magnitude; it adds no inference parameters and directly targets the remaining precision gap.
@@ -174,6 +183,11 @@ Keep it short and operational.
   - rationale: recent additional representation and spatial priors degraded tail balance, while EMA can smooth late-epoch optimizer noise without adding inference parameters or changing the DKD objective.
   - screen only on fixed calibrated validation macro F1 (`tau=0.1`); require a strict improvement above `0.903309` before any milestone test evaluation.
   - development result: promoted `autoresearch_yoloctm_slim_dkd_ema_calselect_priorcal_20260527_175645`, params `10.525M`, fixed-`tau=0.1` val acc `0.98231`, macro P `0.90717`, macro R `0.93266`, macro F1 `0.918524`; test has not yet been read and may now be evaluated exactly once as a predeclared milestone check.
+  - milestone result: test was evaluated once after promotion with fixed `tau=0.1`; acc `0.98242`, macro P `0.91093`, macro R `0.92941`, macro F1 `0.918781`. Freeze this result; future search uses validation only.
+- Next validation-only candidate selected after EMA promotion:
+  - retain EMA export (`ema_decay: 0.999`), fixed calibrated validation screening (`tau=0.1`), and DKD, while switching only the teacher cache from the slim two-branch teacher to the pre-existing stronger three-branch teacher `AutoResearch/cache/train_logprob_ensemble_060202_tau0025.npz`.
+  - rationale: before EMA, the stronger teacher gave lower validation F1 than the slim teacher; EMA's large validation gain justifies re-testing this single teacher factor under the now-stable optimization path. This decision is based on validation evidence available before the lockbox result, not on the frozen test score.
+  - require strict improvement above the current development baseline val macro F1 `0.918524`; keep `test.enabled: false` unless promoted.
 
 ## Practical workflow
 
