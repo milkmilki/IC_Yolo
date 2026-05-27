@@ -13,7 +13,7 @@ prepare:
 model:
   algorithm: yoloctm
   config: null
-  weights: runs/classify/wm811k_yolo26m_20260518_152306/weights/best.pt
+  weights: yolo26m-cls.pt
   pretrained: true
   ctm:
     d_model: 96
@@ -29,7 +29,7 @@ model:
     logit_bias_init: zero
     logit_bias_prior_tau: 0.4
     anchor_loss_weight: 0.0
-    distill_logprobs: AutoResearch/cache/train_logprob_slim_075025_tau0025.npz
+    distill_logprobs: AutoResearch/cache/train_logprob_ensemble_060202_tau0025.npz
     distill_weight: 0.25
     distill_temperature: 2.0
     distill_mode: dkd
@@ -40,7 +40,7 @@ model:
     logprob_fusion_init: 0.2
     expert_fusion: none
     expert_ctm_init: 0.4
-    freeze_yolo_anchor: true
+    freeze_yolo_anchor: false
     spatial_encoding: none
     spatial_encoding_scale_init: 0.05
     token_mixer: none
@@ -59,7 +59,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_frozenanchor_dkd_priorcal
+  name: autoresearch_yoloctm_fullensemble_dkd_priorcal
   add_timestamp: true
   exist_ok: true
 
@@ -81,4 +81,6 @@ metrics:
 logging:
   filename: pipeline.log
   autoresearch: true
-  description: "Frozen trained-YOLO precision anchor with a trainable CTM residual correction distilled by DKD from the compact 0.75*yolo26m + 0.25*ctm_adapter teacher and validation-selected class-prior calibration; tests tail-recall recovery without drifting the clean anchor; effective batch 64 executed as micro_batch 16 x accumulation 4 for stability"
+  status: auto
+  keep_test_macro_f1_min: 0.8998972488416759
+  description: "Trainable CTM residual adapter distilled with DKD from the stronger fixed 0.6*yolo26m + 0.2*ctm_adapter + 0.2*ctm_lowrank teacher (test macro F1 0.91183), with validation-selected class-prior calibration; tests whether the stronger ensemble transfers additional tail balance without increasing student inference parameters"

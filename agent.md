@@ -152,6 +152,11 @@ Keep it short and operational.
   - combine the successful compact-ensemble DKD objective with the existing frozen trained-YOLO anchor path (`freeze_yolo_anchor: true`, `token_mixer: none`) initialized from `runs/classify/wm811k_yolo26m_20260518_152306/weights/best.pt`.
   - rationale: DKD is the only distillation loss that improved the single model, while cross-scan produced a precision-heavy validation overfit. A frozen precision anchor with a trainable CTM residual correction tests whether ensemble-derived tail recovery can be added without allowing the clean YOLO view to drift.
   - keep the fixed protocol and controlled GPU recovery settings; compare against the single-model DKD test macro F1 `0.899897` at `10.525M`.
+  - result: discard `autoresearch_yoloctm_frozenanchor_dkd_priorcal_20260527_120425`, params `10.525M`, test acc `0.97718`, macro P `0.91491`, macro R `0.86384`, macro F1 `0.88648`; freezing retained precision but blocked the `Loc` and `Edge-Loc` corrections learned by trainable DKD.
+- Next evidence-driven DKD candidate selected on 2026-05-27:
+  - use the successful trainable CTM residual adapter and DKD objective with the stronger three-branch teacher cache `AutoResearch/cache/train_logprob_ensemble_060202_tau0025.npz` (teacher test macro F1 `0.91183`) instead of the slim two-branch teacher (`0.90436`).
+  - rationale: ordinary KD from this teacher previously lost recall, but DKD is the only tested transfer loss that improved a single model; this isolates whether stronger teacher complementarity improves the same `10.525M` student without adding inference parameters.
+  - logging now supports `status: auto` against the current best single-model test macro F1 `0.899897`, preventing validation-only gains from being marked as keeps.
 
 ## Practical workflow
 

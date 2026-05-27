@@ -713,6 +713,25 @@ def log_autoresearch_run(run_dir: Path, status: str, description: str) -> None:
     print(f"[autoresearch] JSON summary: {log_path}")
 
 
+def resolve_autoresearch_status(logging_config: dict[str, Any], run_dir: Path) -> str:
+    status = str(logging_config.get("status", "keep")).lower()
+    if status != "auto":
+        return status
+    threshold = logging_config.get("keep_test_macro_f1_min")
+    if threshold is None:
+        raise ValueError("logging.status='auto' requires logging.keep_test_macro_f1_min")
+    report_path = run_dir / "metrics" / "test_classification_report.json"
+    with report_path.open("r", encoding="utf-8") as handle:
+        report = json.load(handle)
+    test_macro_f1 = float(report.get("macro avg", {}).get("f1-score", float("-inf")))
+    status = "keep" if test_macro_f1 >= float(threshold) else "discard"
+    print(
+        f"[autoresearch] auto status={status}: test_macro_f1={test_macro_f1:.6f} "
+        f"threshold={float(threshold):.6f}"
+    )
+    return status
+
+
 def print_plan(config_path: Path, config: dict[str, Any], run_name: str, run_dir: Path) -> None:
     dataset = get_section(config, "dataset")
     prepare = get_section(config, "prepare")
@@ -887,7 +906,8 @@ def main() -> int:
 
         if should_log_autoresearch(config_path, config) and not args.skip_metrics:
             description = str(logging_config.get("description", "Fixed-budget YoloCTM baseline"))
-            log_autoresearch_run(run_dir, "keep", description)
+            status = resolve_autoresearch_status(logging_config, run_dir)
+            log_autoresearch_run(run_dir, status, description)
         elif should_log_autoresearch(config_path, config):
             print("[autoresearch] Deferred until metric reports are generated")
 
