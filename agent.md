@@ -3,24 +3,27 @@
 This file records the practical runbook learned from the latest WM811K AutoResearch runs.
 Keep it short and operational.
 
-## Local development-host execution
+## Autonomous development-host execution
 
-- The user starts long training and evaluation from a visible terminal opened directly on the development machine.
-- Do not launch training or evaluation by wrapping commands through SSH from a mounted network-drive view.
-- Do not use detached `Start-Process` or scheduled tasks for long experiment runs.
+- On 2026-05-26 night, the user explicitly requested that the agent continue experiment cycles autonomously, launch remote commands itself, and recover after crashes without waiting for manual intervention. This supersedes the earlier visible-terminal-only launch preference.
+- Use a standalone workspace automation for overnight continuation, not a thread-attached heartbeat: repeated thread wakeups can fail when Codex compares `\\?\C:\Users\57859\.codex\sessions\...jsonl` with the equivalent unprefixed session path.
+- Give that standalone automation a durable local start directory rather than `R:\Cjn\PCB_Yolo`, because the mounted drive disappears while the development host is powered off and would prevent the recovery task from launching.
+- The automation may inspect the mounted workspace, but every long training/evaluation command must execute through SSH against the development machine's local project path, carried as a Base64 PowerShell `-EncodedCommand` in a locally held foreground SSH process.
 - Treat the project as local on the development machine:
   - `E:\Cjn\PCB_Yolo`
 - Prefer the project Python explicitly:
   - `D:\anaconda3\envs\pcb_yolo\python.exe`
 - If working from `cmd`, use `cd /d E:\Cjn\PCB_Yolo`.
 - If working from PowerShell, use `Set-Location E:\Cjn\PCB_Yolo`.
-- An agent may inspect visible run artifacts, record completed results, implement one next candidate, and provide a launch command; it must not start a second computation while a user-launched run may be active.
+- The agent may inspect artifacts, record results, implement one next candidate, and start/resume one controlled compute job; it must never start a second computation while a run or evaluation is active.
 
 ## Stability Notes
 
 - The development host has suffered repeated BugCheck restarts during earlier GPU and CPU phases. A `400 W` power floor and `300-1200 MHz` graphics-clock lock mitigated but did not prove a root-cause fix.
 - The completed DKD experiment used effective batch `64` as `micro_batch: 16` with gradient accumulation `4`, plus resumable epoch checkpoints.
-- Preserve `last_yoloctm.pt` from interrupted runs; if the user chooses to resume a run, resume the same candidate rather than starting a concurrent duplicate.
+- Preserve `last_yoloctm.pt` from interrupted runs; after a process exit or host restart, record the event and autonomously resume the same candidate rather than starting a concurrent duplicate.
+- Apply `nvidia-smi -pl 400` and `nvidia-smi -lgc 300,1200` before each GPU training or GPU evaluation phase. The user requested GPU test evaluation for speed; run it only after training has ended and no competing process remains.
+- `autoresearch_yoloctm_crossscan_dkd_priorcal_20260526_201638` reached epoch 3 (`val_macro_f1=0.8838`) before the development host was powered off by `RuntimeBroker.exe` at `2026-05-26 23:00:32` (event `1074`, not a BugCheck); resume it from `last_yoloctm.pt` after the `2026-05-27 09:12:53` boot.
 - If the user interrupts a foreground terminal, always check local process state and `pipeline.log` before restarting.
 
 ## Foreground health check
