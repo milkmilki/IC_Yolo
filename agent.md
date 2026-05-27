@@ -188,6 +188,15 @@ Keep it short and operational.
   - retain EMA export (`ema_decay: 0.999`), fixed calibrated validation screening (`tau=0.1`), and DKD, while switching only the teacher cache from the slim two-branch teacher to the pre-existing stronger three-branch teacher `AutoResearch/cache/train_logprob_ensemble_060202_tau0025.npz`.
   - rationale: before EMA, the stronger teacher gave lower validation F1 than the slim teacher; EMA's large validation gain justifies re-testing this single teacher factor under the now-stable optimization path. This decision is based on validation evidence available before the lockbox result, not on the frozen test score.
   - require strict improvement above the current development baseline val macro F1 `0.918524`; keep `test.enabled: false` unless promoted.
+  - result: discard `autoresearch_yoloctm_fullensemble_dkd_ema_calselect_priorcal_20260527_194358`, params `10.525M`, fixed-`tau=0.1` val acc `0.98165`, macro P `0.90264`, macro R `0.93311`, macro F1 `0.916485`; no test metrics generated.
+- Teacher-dependence control selected after user review on 2026-05-27:
+  - retain the promoted EMA architecture and fixed validation-only protocol, but disable distillation entirely (`distill_logprobs: null`, `distill_weight: 0.0`) for `autoresearch_yoloctm_nodistill_ema_calselect_priorcal`.
+  - rationale: the promoted DKD student may inherit a WM811K-specific teacher bias. A no-distillation EMA control distinguishes gains from EMA/model training versus gains requiring the specialized teacher, without consuming the test lockbox.
+  - continue screening against the frozen development baseline val macro F1 `0.918524`; do not test unless it strictly promotes.
+- External generalization track requested on 2026-05-27:
+  - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
+  - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).
+  - do not treat MixedWM38 as an interchangeable WM811K test split: its mixed-pattern label space needs a declared mapping or multi-label external-evaluation protocol before any performance claim.
 
 ## Practical workflow
 

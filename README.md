@@ -140,6 +140,10 @@ experiments from repeated test feedback.
 checkpoint for validation and inference; set it to `0` to keep the ordinary
 online-weight behavior.
 
+Independent external benchmarks such as MixedWM38 require a separately declared
+label-mapping or mixed-defect evaluation protocol; they should not be silently
+substituted for the WM811K held-out split.
+
 Set `prepare.enabled: false` in the YAML to reuse the existing prepared dataset
 without regenerating the train/val/test split on every run.
 
