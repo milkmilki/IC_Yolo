@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import random
 from pathlib import Path
@@ -602,6 +603,12 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="Apply a fixed train-prior logit calibration only when selecting the best validation checkpoint",
     )
+    parser.add_argument(
+        "--ema-decay",
+        type=float,
+        default=0.0,
+        help="EMA decay for selecting and exporting an averaged evaluation model; 0 disables EMA",
+    )
     parser.add_argument("--classifier-cbr-weight", type=float, default=0.0)
     parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
@@ -714,6 +721,18 @@ def prototype_complement_loss(
     return F.cross_entropy(similarities / temperature, labels)
 
 
+@torch.no_grad()
+def update_ema_model(ema_model: nn.Module, model: nn.Module, decay: float) -> None:
+    ema_state = ema_model.state_dict()
+    model_state = model.state_dict()
+    for name, averaged in ema_state.items():
+        current = model_state[name].detach()
+        if averaged.is_floating_point():
+            averaged.mul_(decay).add_(current, alpha=1.0 - decay)
+        else:
+            averaged.copy_(current)
+
+
 def classifier_cbr_loss(model: nn.Module, class_counts: torch.Tensor, power: float = 1.0) -> torch.Tensor:
     weights: list[torch.Tensor] = []
     yolo_linear = getattr(getattr(model, "yolo_head", None), "linear", None)
@@ -781,6 +800,8 @@ def train_one_epoch(
     distill_mode: str = "full",
     prototype_bcl_weight: float = 0.0,
     prototype_bcl_temperature: float = 0.1,
+    ema_model: nn.Module | None = None,
+    ema_decay: float = 0.0,
     class_counts: torch.Tensor | None = None,
     classifier_cbr_weight: float = 0.0,
     classifier_cbr_power: float = 1.0,
@@ -852,6 +873,8 @@ def train_one_epoch(
         (loss / float(group_steps)).backward()
         if (batch_index + 1) % grad_accum_steps == 0 or batch_index + 1 == num_batches:
             optimizer.step()
+            if ema_model is not None:
+                update_ema_model(ema_model, model, float(ema_decay))
             optimizer.zero_grad(set_to_none=True)
         total_loss += loss.item() * labels.size(0)
         correct += (logits.argmax(dim=1) == labels).sum().item()
@@ -1009,6 +1032,13 @@ def main() -> int:
         for parameter in model.yolo_head.parameters():
             parameter.requires_grad_(False)
         print("[anchor] frozen YOLO backbone and classification head; training CTM residual correction only")
+    ema_model = None
+    if float(args.ema_decay) != 0.0:
+        if not 0.0 < float(args.ema_decay) < 1.0:
+            raise ValueError("--ema-decay must be in (0, 1) when enabled")
+        ema_model = copy.deepcopy(model).eval()
+        ema_model.requires_grad_(False)
+        print(f"[ema] evaluation/export decay={float(args.ema_decay):.6f}")
 
     if args.loss == "balanced_softmax":
         criterion = BalancedSoftmaxLoss(class_counts).to(device)
@@ -1056,6 +1086,8 @@ def main() -> int:
             raise ValueError("Resume checkpoint classes do not match the current training dataset")
         model.load_state_dict(resumed["model_state"], strict=True)
         optimizer.load_state_dict(resumed["optimizer_state"])
+        if ema_model is not None:
+            ema_model.load_state_dict(resumed.get("ema_model_state", resumed["model_state"]), strict=True)
         best_val_f1 = float(resumed.get("best_val_macro_f1", 0.0))
         best_val_acc = float(resumed.get("best_val_acc", 0.0))
         history = list(resumed.get("history", []))
@@ -1065,9 +1097,14 @@ def main() -> int:
             f"best_val_macro_f1={best_val_f1:.4f}"
         )
 
-    def checkpoint_payload(include_optimizer: bool, epoch: int) -> dict[str, object]:
+    def checkpoint_payload(
+        include_optimizer: bool,
+        epoch: int,
+        inference_model: nn.Module | None = None,
+    ) -> dict[str, object]:
+        checkpoint_model = inference_model if inference_model is not None else model
         payload: dict[str, object] = {
-            "model_state": model.state_dict(),
+            "model_state": checkpoint_model.state_dict(),
             "classes": train_ds.classes,
             "args": vars(args),
             "in_dim": in_dim,
@@ -1082,11 +1119,14 @@ def main() -> int:
             "classifier_cbr_weight": float(args.classifier_cbr_weight),
             "classifier_cbr_power": float(args.classifier_cbr_power),
             "classifier_cbr_start_epoch": int(args.classifier_cbr_start_epoch),
+            "ema_decay": float(args.ema_decay),
             "epoch": epoch,
             "history": history,
         }
         if include_optimizer:
             payload["optimizer_state"] = optimizer.state_dict()
+            if ema_model is not None:
+                payload["ema_model_state"] = ema_model.state_dict()
         return payload
 
     for epoch in range(start_epoch, args.epochs + 1):
@@ -1114,13 +1154,16 @@ def main() -> int:
             distill_mode=str(args.distill_mode),
             prototype_bcl_weight=float(args.prototype_bcl_weight),
             prototype_bcl_temperature=float(args.prototype_bcl_temperature),
+            ema_model=ema_model,
+            ema_decay=float(args.ema_decay),
             class_counts=class_counts,
             classifier_cbr_weight=classifier_cbr_weight,
             classifier_cbr_power=float(args.classifier_cbr_power),
             grad_accum_steps=grad_accum_steps,
         )
+        selection_model = ema_model if ema_model is not None else model
         val_loss, val_acc, val_macro_f1 = evaluate(
-            model,
+            selection_model,
             val_loader,
             criterion,
             device,
@@ -1141,7 +1184,10 @@ def main() -> int:
         if val_macro_f1 > best_val_f1:
             best_val_f1 = val_macro_f1
             best_val_acc = val_acc
-            torch.save(checkpoint_payload(include_optimizer=False, epoch=epoch), out_dir / "best_yoloctm.pt")
+            torch.save(
+                checkpoint_payload(include_optimizer=False, epoch=epoch, inference_model=selection_model),
+                out_dir / "best_yoloctm.pt",
+            )
         torch.save(checkpoint_payload(include_optimizer=True, epoch=epoch), out_dir / "last_yoloctm.pt")
 
     with (out_dir / "metrics.json").open("w", encoding="utf-8") as f:

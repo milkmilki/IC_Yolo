@@ -136,6 +136,10 @@ only `metrics.splits: [val]`, and use a predeclared calibration value. Reserve
 the test split for a promoted milestone checkpoint instead of selecting
 experiments from repeated test feedback.
 
+`train.ema_decay` optionally exports an exponential-moving-average YoloCTM
+checkpoint for validation and inference; set it to `0` to keep the ordinary
+online-weight behavior.
+
 Set `prepare.enabled: false` in the YAML to reuse the existing prepared dataset
 without regenerating the train/val/test split on every run.
 

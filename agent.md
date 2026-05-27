@@ -168,6 +168,11 @@ Keep it short and operational.
   - rationale: the incumbent was checkpoint-selected using uncalibrated validation macro F1 and only calibrated afterwards. Selecting against the deployed prediction rule can recover a better epoch without altering the model, distillation teacher, data protocol, or inference parameter count.
   - reward-hacking guard: subsequent development screening must not read the test split on each iteration. This candidate sets `test.enabled: false`, emits only validation metrics, uses the predeclared fixed `metrics.prior_logit_tau: 0.1`, and advances only against the incumbent calibrated validation macro F1 `0.903309`.
   - evaluate the held-out test split only after a candidate is promoted as a milestone under the predeclared validation rule; do not choose follow-up experiments from repeated test comparisons.
+  - result: discard `autoresearch_yoloctm_slim_dkd_calselect_priorcal_20260527_162016`, params `10.525M`, calibrated validation macro F1 `0.903309`, exactly tied with the incumbent; no test-set metrics were generated.
+- Next validation-only candidate selected on 2026-05-27:
+  - add exponential moving average exported weights (`ema_decay: 0.999`) to the successful slim-teacher DKD adapter, following the weight-averaged teacher principle of Tarvainen and Valpola, NeurIPS 2017, `https://papers.nips.cc/paper/2017/hash/68053af2923e00204c3ca7c6a3150cf7-Abstract.html`.
+  - rationale: recent additional representation and spatial priors degraded tail balance, while EMA can smooth late-epoch optimizer noise without adding inference parameters or changing the DKD objective.
+  - screen only on fixed calibrated validation macro F1 (`tau=0.1`); require a strict improvement above `0.903309` before any milestone test evaluation.
 
 ## Practical workflow
 

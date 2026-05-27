@@ -347,6 +347,8 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str, resume_checkpoint
         str(ctm_config.get("prototype_bcl_temperature", 0.1)),
         "--selection-prior-logit-tau",
         str(train_config.get("selection_prior_logit_tau", 0.0)),
+        "--ema-decay",
+        str(train_config.get("ema_decay", 0.0)),
         "--classifier-cbr-weight",
         str(ctm_config.get("classifier_cbr_weight", 0.0)),
         "--classifier-cbr-power",
@@ -735,7 +737,7 @@ def resolve_autoresearch_status(logging_config: dict[str, Any], run_dir: Path) -
     with report_path.open("r", encoding="utf-8") as handle:
         report = json.load(handle)
     macro_f1 = float(report.get("macro avg", {}).get("f1-score", float("-inf")))
-    status = "keep" if macro_f1 >= float(threshold) else "discard"
+    status = "keep" if macro_f1 > float(threshold) else "discard"
     print(
         f"[autoresearch] auto status={status}: {metric_source}_macro_f1={macro_f1:.6f} "
         f"threshold={float(threshold):.6f}"
