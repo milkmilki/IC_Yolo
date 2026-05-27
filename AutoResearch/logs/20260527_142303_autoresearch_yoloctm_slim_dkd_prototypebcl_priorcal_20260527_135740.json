@@ -1,0 +1,137 @@
+{
+  "row": {
+    "timestamp": "2026-05-27T14:23:03",
+    "status": "crash",
+    "algorithm": "yoloctm",
+    "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_slim_dkd_prototypebcl_priorcal_20260527_135740",
+    "params_m": "",
+    "epochs": "10",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "0",
+    "model_summary": "yolo26m-cls.pt | ctm(d=96,s=4,drop=0.1,pow=0.5) | fusion=residual | distill(w=0.25,T=2.0)[dkd]",
+    "val_acc": "",
+    "val_macro_p": "",
+    "val_macro_r": "",
+    "val_macro_f1": "",
+    "test_acc": "",
+    "test_macro_p": "",
+    "test_macro_r": "",
+    "test_macro_f1": "",
+    "description": "BCL-inspired prototype-complement DKD launch lost the SSH-held foreground connection before epoch 1; no checkpoint was written and no contemporaneous Windows BugCheck or shutdown event was present; relaunching the same candidate under the controlled GPU protocol."
+  },
+  "config": {
+    "dataset": {
+      "source": "data/MIR-WM811K",
+      "output": "data/wm811k_cls",
+      "image_size": 224,
+      "ratios": [
+        70,
+        15,
+        15
+      ],
+      "include_none": true,
+      "seed": 42,
+      "overwrite": false
+    },
+    "prepare": {
+      "enabled": false
+    },
+    "model": {
+      "algorithm": "yoloctm",
+      "config": null,
+      "weights": "yolo26m-cls.pt",
+      "pretrained": true,
+      "ctm": {
+        "d_model": 96,
+        "steps": 4,
+        "dropout": 0.1,
+        "class_weight_power": 0.5,
+        "adapter_rank": 0,
+        "feature_adapter": true,
+        "feature_fusion": "residual",
+        "gate_rank": 16,
+        "token_gate_rank": 16,
+        "logit_bias": false,
+        "logit_bias_init": "zero",
+        "logit_bias_prior_tau": 0.4,
+        "anchor_loss_weight": 0.0,
+        "distill_logprobs": "AutoResearch/cache/train_logprob_slim_075025_tau0025.npz",
+        "distill_weight": 0.25,
+        "distill_temperature": 2.0,
+        "distill_mode": "dkd",
+        "prototype_bcl_weight": 0.05,
+        "prototype_bcl_temperature": 0.1,
+        "classifier_cbr_weight": 0.0,
+        "classifier_cbr_power": 1.0,
+        "classifier_cbr_start_epoch": 1,
+        "logprob_fusion": false,
+        "logprob_fusion_init": 0.2,
+        "expert_fusion": "none",
+        "expert_ctm_init": 0.4,
+        "freeze_yolo_anchor": false,
+        "spatial_encoding": "none",
+        "spatial_encoding_scale_init": 0.05,
+        "token_mixer": "none",
+        "scan_scale_init": 0.05,
+        "readout": "mean"
+      }
+    },
+    "train": {
+      "epochs": 10,
+      "imgsz": 224,
+      "batch": 64,
+      "micro_batch": 16,
+      "device": "0",
+      "workers": 0,
+      "sampling": "natural",
+      "none_sampling_ratio": 0.75,
+      "sampling_start_epoch": 1,
+      "patience": 20,
+      "project": "runs/classify",
+      "name": "autoresearch_yoloctm_slim_dkd_prototypebcl_priorcal",
+      "add_timestamp": true,
+      "exist_ok": true
+    },
+    "validate": {
+      "enabled": true,
+      "split": "val"
+    },
+    "test": {
+      "enabled": true,
+      "split": "test"
+    },
+    "metrics": {
+      "enabled": true,
+      "splits": [
+        "val",
+        "test"
+      ],
+      "batch": 128,
+      "prior_logit_tau": "auto",
+      "prior_logit_tau_candidates": [
+        0.0,
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+        0.6,
+        0.7
+      ]
+    },
+    "logging": {
+      "filename": "pipeline.log",
+      "autoresearch": true,
+      "status": "auto",
+      "keep_test_macro_f1_min": 0.8998972488416759,
+      "description": "BCL-inspired class-complement prototype auxiliary loss on the successful slim-teacher DKD CTM residual adapter: normalized CTM embeddings contrast against all classifier prototypes each batch to strengthen long-tail representation without adding inference parameters; validation-selected class-prior calibration"
+    }
+  },
+  "checkpoint_meta": {},
+  "checkpoint_path": "",
+  "reports": {
+    "val": {},
+    "test": {}
+  }
+}
