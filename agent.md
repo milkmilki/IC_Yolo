@@ -6,8 +6,8 @@ Keep it short and operational.
 ## Autonomous development-host execution
 
 - On 2026-05-26 night, the user explicitly requested that the agent continue experiment cycles autonomously, launch remote commands itself, and recover after crashes without waiting for manual intervention. This supersedes the earlier visible-terminal-only launch preference.
-- Use a standalone workspace automation for overnight continuation, not a thread-attached heartbeat: repeated thread wakeups can fail when Codex compares `\\?\C:\Users\57859\.codex\sessions\...jsonl` with the equivalent unprefixed session path.
-- Give that standalone automation a durable local start directory rather than `R:\Cjn\PCB_Yolo`, because the mounted drive disappears while the development host is powered off and would prevent the recovery task from launching.
+- On 2026-05-27, the user explicitly requested a thread-attached heartbeat for this conversation instead of a standalone workspace automation. A 30-minute heartbeat now owns monitoring, recovery, evaluation, and subsequent experiment launches; do not create a parallel standalone runner.
+- The heartbeat must tolerate the mounted `R:` drive disappearing while the development host is powered off: begin each wakeup by attempting SSH to the development host and operate on `E:\Cjn\PCB_Yolo` once it is reachable.
 - The automation may inspect the mounted workspace, but every long training/evaluation command must execute through SSH against the development machine's local project path, carried as a Base64 PowerShell `-EncodedCommand` in a locally held foreground SSH process.
 - Treat the project as local on the development machine:
   - `E:\Cjn\PCB_Yolo`
@@ -23,7 +23,7 @@ Keep it short and operational.
 - The completed DKD experiment used effective batch `64` as `micro_batch: 16` with gradient accumulation `4`, plus resumable epoch checkpoints.
 - Preserve `last_yoloctm.pt` from interrupted runs; after a process exit or host restart, record the event and autonomously resume the same candidate rather than starting a concurrent duplicate.
 - Apply `nvidia-smi -pl 400` and `nvidia-smi -lgc 300,1200` before each GPU training or GPU evaluation phase. The user requested GPU test evaluation for speed; run it only after training has ended and no competing process remains.
-- `autoresearch_yoloctm_crossscan_dkd_priorcal_20260526_201638` reached epoch 3 (`val_macro_f1=0.8838`) before the development host was powered off by `RuntimeBroker.exe` at `2026-05-26 23:00:32` (event `1074`, not a BugCheck); resume it from `last_yoloctm.pt` after the `2026-05-27 09:12:53` boot.
+- `autoresearch_yoloctm_crossscan_dkd_priorcal_20260526_201638` reached epoch 3 (`val_macro_f1=0.8838`) before the development host was powered off by `RuntimeBroker.exe` at `2026-05-26 23:00:32` (event `1074`, not a BugCheck). It resumed after the `2026-05-27 09:12:53` boot, reached epoch 8 with best observed `val_macro_f1=0.8967` at epoch 6, then was interrupted by `BugCheck 0x50` reported at `2026-05-27 11:00:47`; resume it from `last_yoloctm.pt`.
 - If the user interrupts a foreground terminal, always check local process state and `pipeline.log` before restarting.
 
 ## Foreground health check
@@ -147,6 +147,11 @@ Keep it short and operational.
   - combine the successful compact-ensemble DKD objective with the implemented VMamba-inspired shared cross-scan CTM token mixer (`token_mixer: cross_scan`), following Liu et al., VMamba, `https://arxiv.org/abs/2401.10166`.
   - rationale: both loss replacements degraded minority-class balance; cross-scan instead adds a small spatial structural prior to the best DKD student, and its previous non-DKD trial was interrupted by system crashes before it could be evaluated.
   - keep the controlled `micro_batch: 16` x accumulation `4` launch, `400 W` power limit, `300,1200` GPU clock lock, resumable checkpoints, and user-authorized controlled GPU test/metric evaluation.
+  - result: discard `autoresearch_yoloctm_crossscan_dkd_priorcal_20260526_201638`, params `10.535M`, test acc `0.98073`, macro P `0.92305`, macro R `0.85492`, macro F1 `0.88270`; validation macro F1 reached `0.90680`, but the spatial mixer did not generalize and reduced test recall for `Loc`, `Near-full`, and `Scratch`.
+- Next high-performance candidate selected on 2026-05-27:
+  - combine the successful compact-ensemble DKD objective with the existing frozen trained-YOLO anchor path (`freeze_yolo_anchor: true`, `token_mixer: none`) initialized from `runs/classify/wm811k_yolo26m_20260518_152306/weights/best.pt`.
+  - rationale: DKD is the only distillation loss that improved the single model, while cross-scan produced a precision-heavy validation overfit. A frozen precision anchor with a trainable CTM residual correction tests whether ensemble-derived tail recovery can be added without allowing the clean YOLO view to drift.
+  - keep the fixed protocol and controlled GPU recovery settings; compare against the single-model DKD test macro F1 `0.899897` at `10.525M`.
 
 ## Practical workflow
 
