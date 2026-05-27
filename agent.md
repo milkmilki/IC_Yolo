@@ -173,6 +173,7 @@ Keep it short and operational.
   - add exponential moving average exported weights (`ema_decay: 0.999`) to the successful slim-teacher DKD adapter, following the weight-averaged teacher principle of Tarvainen and Valpola, NeurIPS 2017, `https://papers.nips.cc/paper/2017/hash/68053af2923e00204c3ca7c6a3150cf7-Abstract.html`.
   - rationale: recent additional representation and spatial priors degraded tail balance, while EMA can smooth late-epoch optimizer noise without adding inference parameters or changing the DKD objective.
   - screen only on fixed calibrated validation macro F1 (`tau=0.1`); require a strict improvement above `0.903309` before any milestone test evaluation.
+  - development result: promoted `autoresearch_yoloctm_slim_dkd_ema_calselect_priorcal_20260527_175645`, params `10.525M`, fixed-`tau=0.1` val acc `0.98231`, macro P `0.90717`, macro R `0.93266`, macro F1 `0.918524`; test has not yet been read and may now be evaluated exactly once as a predeclared milestone check.
 
 ## Practical workflow
 
