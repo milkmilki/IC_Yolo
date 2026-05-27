@@ -162,6 +162,11 @@ Keep it short and operational.
   - add a BCL-inspired class-complement prototype auxiliary objective to the best slim-teacher DKD adapter, based on Zhu et al., CVPR 2022, `https://openaccess.thecvf.com/content/CVPR2022/html/Zhu_Balanced_Contrastive_Learning_for_Long-Tailed_Visual_Recognition_CVPR_2022_paper.html`.
   - implementation scope: normalized pooled CTM embeddings contrast against the existing CTM classifier rows as all-class prototypes (`prototype_bcl_weight: 0.05`, `temperature: 0.1`); training-only objective, zero added inference parameters, and explicitly an adaptation rather than a full dual-view BCL reproduction.
   - rationale: recent failures either over-raised precision or constrained minority correction; a class-complement representation target directly addresses `Loc` and `Random` separation under small micro-batches while retaining successful DKD.
+  - result: discard `autoresearch_yoloctm_slim_dkd_prototypebcl_priorcal_20260527_142934`, params `10.525M`, test acc `0.97984`, macro P `0.90716`, macro R `0.88759`, macro F1 `0.89629`; the auxiliary representation objective did not preserve the incumbent DKD minority recall balance.
+- Next metric-aligned DKD candidate selected on 2026-05-27:
+  - retain the successful slim-teacher DKD architecture and loss, but select the saved checkpoint using a fixed validation class-prior adjustment `selection_prior_logit_tau: 0.1`, matching the calibration selected by the incumbent DKD run.
+  - rationale: the incumbent was checkpoint-selected using uncalibrated validation macro F1 and only calibrated afterwards. Selecting against the deployed prediction rule can recover a better epoch without altering the model, distillation teacher, data protocol, or inference parameter count.
+  - final evaluation still performs validation-selected prior-logit calibration, and the keep threshold remains the incumbent single-model test macro F1 `0.899897`.
 
 ## Practical workflow
 

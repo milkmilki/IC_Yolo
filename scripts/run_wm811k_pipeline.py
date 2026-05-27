@@ -345,6 +345,8 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str, resume_checkpoint
         str(ctm_config.get("prototype_bcl_weight", 0.0)),
         "--prototype-bcl-temperature",
         str(ctm_config.get("prototype_bcl_temperature", 0.1)),
+        "--selection-prior-logit-tau",
+        str(train_config.get("selection_prior_logit_tau", 0.0)),
         "--classifier-cbr-weight",
         str(ctm_config.get("classifier_cbr_weight", 0.0)),
         "--classifier-cbr-power",

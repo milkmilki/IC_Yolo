@@ -126,6 +126,11 @@ model:
 For the spatial CTM head, set `algorithm: yoloctm`; CTM-specific parameters
 live under `model.ctm`.
 
+For calibrated YoloCTM experiments, `train.selection_prior_logit_tau` optionally
+applies a fixed class-prior logit adjustment only while selecting the best
+validation checkpoint. Final metric calibration remains configured under
+`metrics.prior_logit_tau`.
+
 Set `prepare.enabled: false` in the YAML to reuse the existing prepared dataset
 without regenerating the train/val/test split on every run.
 

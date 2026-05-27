@@ -596,6 +596,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--distill-mode", choices=["full", "nontarget_zscore", "dkd", "dkd_logit_std", "dist"], default="full")
     parser.add_argument("--prototype-bcl-weight", type=float, default=0.0)
     parser.add_argument("--prototype-bcl-temperature", type=float, default=0.1)
+    parser.add_argument(
+        "--selection-prior-logit-tau",
+        type=float,
+        default=0.0,
+        help="Apply a fixed train-prior logit calibration only when selecting the best validation checkpoint",
+    )
     parser.add_argument("--classifier-cbr-weight", type=float, default=0.0)
     parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
@@ -853,7 +859,13 @@ def train_one_epoch(
     return total_loss / max(total, 1), correct / max(total, 1)
 
 
-def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device: torch.device) -> tuple[float, float, float]:
+def evaluate(
+    model: nn.Module,
+    loader: DataLoader,
+    criterion: nn.Module,
+    device: torch.device,
+    prediction_logit_bias: torch.Tensor | None = None,
+) -> tuple[float, float, float]:
     model.eval()
     total_loss = 0.0
     correct = 0
@@ -866,7 +878,10 @@ def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device:
             images, labels = images.to(device), labels.to(device)
             logits = model(images)
             loss = criterion(logits, labels)
-            preds = logits.argmax(dim=1)
+            metric_logits = logits
+            if prediction_logit_bias is not None:
+                metric_logits = logits + prediction_logit_bias.unsqueeze(0)
+            preds = metric_logits.argmax(dim=1)
             total_loss += loss.item() * labels.size(0)
             correct += (preds == labels).sum().item()
             total += labels.size(0)
@@ -945,6 +960,12 @@ def main() -> int:
     )
 
     class_counts = torch.bincount(torch.tensor(train_ds.targets), minlength=len(train_ds.classes)).float()
+    selection_logit_bias = None
+    if float(args.selection_prior_logit_tau) != 0.0:
+        selection_logit_bias = (
+            float(args.selection_prior_logit_tau) * class_counts.clamp(min=1.0).log()
+        ).to(device)
+        print(f"[selection] validation prior_logit_tau={float(args.selection_prior_logit_tau):.4f}")
     logit_bias_init = None
     if bool(args.logit_bias) and str(args.logit_bias_init).lower() == "prior":
         logit_bias_init = float(args.logit_bias_prior_tau) * class_counts.clamp(min=1.0).log()
@@ -1098,7 +1119,13 @@ def main() -> int:
             classifier_cbr_power=float(args.classifier_cbr_power),
             grad_accum_steps=grad_accum_steps,
         )
-        val_loss, val_acc, val_macro_f1 = evaluate(model, val_loader, criterion, device)
+        val_loss, val_acc, val_macro_f1 = evaluate(
+            model,
+            val_loader,
+            criterion,
+            device,
+            prediction_logit_bias=selection_logit_bias,
+        )
         history.append({
             "epoch": epoch,
             "train_loss": train_loss,
