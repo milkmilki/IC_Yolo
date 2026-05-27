@@ -166,7 +166,8 @@ Keep it short and operational.
 - Next metric-aligned DKD candidate selected on 2026-05-27:
   - retain the successful slim-teacher DKD architecture and loss, but select the saved checkpoint using a fixed validation class-prior adjustment `selection_prior_logit_tau: 0.1`, matching the calibration selected by the incumbent DKD run.
   - rationale: the incumbent was checkpoint-selected using uncalibrated validation macro F1 and only calibrated afterwards. Selecting against the deployed prediction rule can recover a better epoch without altering the model, distillation teacher, data protocol, or inference parameter count.
-  - final evaluation still performs validation-selected prior-logit calibration, and the keep threshold remains the incumbent single-model test macro F1 `0.899897`.
+  - reward-hacking guard: subsequent development screening must not read the test split on each iteration. This candidate sets `test.enabled: false`, emits only validation metrics, uses the predeclared fixed `metrics.prior_logit_tau: 0.1`, and advances only against the incumbent calibrated validation macro F1 `0.903309`.
+  - evaluate the held-out test split only after a candidate is promoted as a milestone under the predeclared validation rule; do not choose follow-up experiments from repeated test comparisons.
 
 ## Practical workflow
 
@@ -182,3 +183,4 @@ Keep it short and operational.
 8. If a YoloCTM run has high macro recall but weak macro precision, run a validation-selected class-prior logit calibration check before changing architecture again.
    - For the current CTM adapter, `tau=0.4` was selected on validation and improved test macro F1 from `0.87726` to `0.89835`.
    - Log calibrated evaluations as separate AutoResearch runs so raw and calibrated metrics stay auditable.
+9. For iterative model search after 2026-05-27, use validation-only screening with predeclared calibration settings; do not generate or consume test metrics until a milestone candidate is promoted.

@@ -71,19 +71,18 @@ validate:
   split: val
 
 test:
-  enabled: true
+  enabled: false
   split: test
 
 metrics:
   enabled: true
-  splits: [val, test]
+  splits: [val]
   batch: 128
-  prior_logit_tau: auto
-  prior_logit_tau_candidates: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+  prior_logit_tau: 0.1
 
 logging:
   filename: pipeline.log
   autoresearch: true
   status: auto
-  keep_test_macro_f1_min: 0.8998972488416759
-  description: "Calibration-aware checkpoint selection for the successful slim-teacher DKD CTM residual adapter: select best epoch using fixed validation prior-logit tau=0.1 observed in the incumbent, then retain validation-selected final calibration; zero added inference parameters"
+  keep_val_macro_f1_min: 0.9033090178395459
+  description: "Development-only screening: calibration-aware checkpoint selection for the successful slim-teacher DKD CTM residual adapter, with fixed validation prior-logit tau=0.1 observed in the incumbent and no test-set evaluation; zero added inference parameters"

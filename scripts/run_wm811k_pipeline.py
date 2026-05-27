@@ -723,16 +723,21 @@ def resolve_autoresearch_status(logging_config: dict[str, Any], run_dir: Path) -
     status = str(logging_config.get("status", "keep")).lower()
     if status != "auto":
         return status
-    threshold = logging_config.get("keep_test_macro_f1_min")
+    metric_source = "val" if "keep_val_macro_f1_min" in logging_config else "test"
+    threshold_key = f"keep_{metric_source}_macro_f1_min"
+    threshold = logging_config.get(threshold_key)
     if threshold is None:
-        raise ValueError("logging.status='auto' requires logging.keep_test_macro_f1_min")
-    report_path = run_dir / "metrics" / "test_classification_report.json"
+        raise ValueError(
+            "logging.status='auto' requires logging.keep_val_macro_f1_min "
+            "or logging.keep_test_macro_f1_min"
+        )
+    report_path = run_dir / "metrics" / f"{metric_source}_classification_report.json"
     with report_path.open("r", encoding="utf-8") as handle:
         report = json.load(handle)
-    test_macro_f1 = float(report.get("macro avg", {}).get("f1-score", float("-inf")))
-    status = "keep" if test_macro_f1 >= float(threshold) else "discard"
+    macro_f1 = float(report.get("macro avg", {}).get("f1-score", float("-inf")))
+    status = "keep" if macro_f1 >= float(threshold) else "discard"
     print(
-        f"[autoresearch] auto status={status}: test_macro_f1={test_macro_f1:.6f} "
+        f"[autoresearch] auto status={status}: {metric_source}_macro_f1={macro_f1:.6f} "
         f"threshold={float(threshold):.6f}"
     )
     return status

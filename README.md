@@ -131,6 +131,11 @@ applies a fixed class-prior logit adjustment only while selecting the best
 validation checkpoint. Final metric calibration remains configured under
 `metrics.prior_logit_tau`.
 
+During iterative AutoResearch screening, set `test.enabled: false`, evaluate
+only `metrics.splits: [val]`, and use a predeclared calibration value. Reserve
+the test split for a promoted milestone checkpoint instead of selecting
+experiments from repeated test feedback.
+
 Set `prepare.enabled: false` in the YAML to reuse the existing prepared dataset
 without regenerating the train/val/test split on every run.
 
