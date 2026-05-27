@@ -198,6 +198,12 @@ Keep it short and operational.
   - keep no-distillation EMA unchanged and adjust only its predeclared validation prior-logit calibration from `tau=0.1` to `tau=0.4`, using prior non-distilled CTM validation evidence rather than test feedback.
   - rationale: the new no-distillation baseline is strongly recall-heavy and precision-limited; the prior non-distilled CTM adapter previously selected `tau=0.4` on validation, making this a track-specific calibration correction rather than a teacher-dependent change.
   - promotion threshold for this track is strict improvement above validation macro F1 `0.882153`; `test.enabled: false` remains mandatory.
+  - result: track best `autoresearch_yoloctm_nodistill_ema_tau04_calselect_20260527_214912`, params `10.525M`, fixed-`tau=0.4` val acc `0.97984`, macro P `0.90404`, macro R `0.90317`, macro F1 `0.902814`; no test metrics generated.
+- Next non-distilled-track candidate selected after calibration improvement:
+  - add a conservative deferred LDAM-inspired target-margin objective (`loss: ldam_drw`, `ldam_max_margin: 0.2`, starts at epoch `7`) to the EMA non-distilled track, based on Cao et al., NeurIPS 2019, `https://papers.nips.cc/paper/2019/hash/621461af90cadfdaf0e8d4cc25129f91-Abstract.html`.
+  - implementation is a scoped adaptation: retain the existing weighted cross-entropy and add class-frequency margins only late in training, rather than introducing a teacher or broad sampling change.
+  - rationale: after calibrated EMA, remaining validation weakness is concentrated in `Loc` and `Scratch`; deferred minority margins target that deficit while preserving the newly balanced precision/recall operating point.
+  - screen only against the non-distilled validation track best `0.902814`; do not generate test metrics unless this independent track later reaches a separately declared milestone.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).

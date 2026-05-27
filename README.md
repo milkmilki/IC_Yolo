@@ -140,6 +140,11 @@ experiments from repeated test feedback.
 checkpoint for validation and inference; set it to `0` to keep the ordinary
 online-weight behavior.
 
+For non-distilled long-tail trials, `model.ctm.loss: ldam_drw` enables a
+deferred LDAM-inspired target margin controlled by `ldam_max_margin` and
+`ldam_start_epoch`; it preserves the existing weighted cross-entropy outside
+the configured margin phase.
+
 Independent external benchmarks such as MixedWM38 require a separately declared
 label-mapping or mixed-defect evaluation protocol; they should not be silently
 substituted for the WM811K held-out split.

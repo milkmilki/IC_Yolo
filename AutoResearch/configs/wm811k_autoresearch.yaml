@@ -38,6 +38,9 @@ model:
     classifier_cbr_weight: 0.0
     classifier_cbr_power: 1.0
     classifier_cbr_start_epoch: 1
+    loss: ldam_drw
+    ldam_max_margin: 0.2
+    ldam_start_epoch: 7
     logprob_fusion: false
     logprob_fusion_init: 0.2
     expert_fusion: none
@@ -63,7 +66,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_nodistill_ema_tau04_calselect
+  name: autoresearch_yoloctm_nodistill_ema_ldam_tau04
   add_timestamp: true
   exist_ok: true
 
@@ -85,5 +88,5 @@ logging:
   filename: pipeline.log
   autoresearch: true
   status: auto
-  keep_val_macro_f1_min: 0.8821530288604961
-  description: "Non-distilled track screening: EMA-averaged CTM residual adapter with no distillation and fixed validation prior-logit tau=0.4, chosen from prior non-distilled CTM validation evidence to restore precision; no test-set evaluation"
+  keep_val_macro_f1_min: 0.9028144470534541
+  description: "Non-distilled track screening: EMA CTM residual adapter with deferred LDAM-inspired minority target margins (max_margin=0.2 from epoch 7), fixed validation prior-logit tau=0.4, and no distillation or test-set evaluation"

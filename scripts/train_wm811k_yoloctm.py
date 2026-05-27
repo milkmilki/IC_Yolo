@@ -170,6 +170,23 @@ class BalancedSoftmaxLoss(nn.Module):
         return F.cross_entropy(logits + self.log_counts.to(logits.device), labels)
 
 
+class LDAMLoss(nn.Module):
+    """LDAM-inspired target margins layered on the experiment's weighted CE."""
+
+    def __init__(self, class_counts: torch.Tensor, max_margin: float, weight: torch.Tensor) -> None:
+        super().__init__()
+        margins = class_counts.clamp(min=1.0).pow(-0.25)
+        margins = margins * (float(max_margin) / margins.max())
+        self.register_buffer("margins", margins)
+        self.register_buffer("weight", weight)
+
+    def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        adjusted = logits.clone()
+        target_margins = self.margins[labels].view(-1, 1).to(logits.device)
+        adjusted.scatter_add_(1, labels.view(-1, 1), -target_margins)
+        return F.cross_entropy(adjusted, labels, weight=self.weight.to(logits.device))
+
+
 class YoloCTM(nn.Module):
     def __init__(
         self,
@@ -612,7 +629,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--classifier-cbr-weight", type=float, default=0.0)
     parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
-    parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax"], default="weighted_ce")
+    parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax", "ldam_drw"], default="weighted_ce")
+    parser.add_argument("--ldam-max-margin", type=float, default=0.2)
+    parser.add_argument("--ldam-start-epoch", type=int, default=7)
     parser.add_argument("--train-sampling", choices=["natural", "none_aware"], default="natural")
     parser.add_argument("--none-sampling-ratio", type=float, default=0.5)
     parser.add_argument("--train-sampling-start-epoch", type=int, default=1)
@@ -1040,12 +1059,19 @@ def main() -> int:
         ema_model.requires_grad_(False)
         print(f"[ema] evaluation/export decay={float(args.ema_decay):.6f}")
 
+    ldam_criterion = None
     if args.loss == "balanced_softmax":
         criterion = BalancedSoftmaxLoss(class_counts).to(device)
     else:
         class_weights = (class_counts.sum() / class_counts.clamp(min=1.0)).pow(args.class_weight_power)
         class_weights = (class_weights / class_weights.mean()).to(device)
         criterion = nn.CrossEntropyLoss(weight=class_weights)
+        if args.loss == "ldam_drw":
+            ldam_criterion = LDAMLoss(class_counts, float(args.ldam_max_margin), class_weights).to(device)
+            print(
+                f"[ldam] max_margin={float(args.ldam_max_margin):.4f} "
+                f"starts at epoch {int(args.ldam_start_epoch)}"
+            )
     optimizer = torch.optim.AdamW(
         [parameter for parameter in model.parameters() if parameter.requires_grad],
         lr=args.lr,
@@ -1130,6 +1156,11 @@ def main() -> int:
         return payload
 
     for epoch in range(start_epoch, args.epochs + 1):
+        train_criterion = (
+            ldam_criterion
+            if ldam_criterion is not None and epoch >= int(args.ldam_start_epoch)
+            else criterion
+        )
         classifier_cbr_weight = (
             float(args.classifier_cbr_weight)
             if epoch >= int(args.classifier_cbr_start_epoch)
@@ -1165,7 +1196,7 @@ def main() -> int:
         val_loss, val_acc, val_macro_f1 = evaluate(
             selection_model,
             val_loader,
-            criterion,
+            train_criterion,
             device,
             prediction_logit_bias=selection_logit_bias,
         )
