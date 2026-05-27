@@ -54,7 +54,7 @@ train:
   imgsz: 224
   batch: 64
   micro_batch: 16
-  selection_prior_logit_tau: 0.1
+  selection_prior_logit_tau: 0.4
   ema_decay: 0.999
   device: "0"
   workers: 0
@@ -63,7 +63,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_nodistill_ema_calselect_priorcal
+  name: autoresearch_yoloctm_nodistill_ema_tau04_calselect
   add_timestamp: true
   exist_ok: true
 
@@ -79,11 +79,11 @@ metrics:
   enabled: true
   splits: [val]
   batch: 128
-  prior_logit_tau: 0.1
+  prior_logit_tau: 0.4
 
 logging:
   filename: pipeline.log
   autoresearch: true
   status: auto
-  keep_val_macro_f1_min: 0.9185237871504248
-  description: "Development-only teacher-dependence control: EMA-averaged (decay=0.999) CTM residual adapter trained without distillation, with fixed validation prior-logit tau=0.1; no test-set evaluation and zero added inference parameters"
+  keep_val_macro_f1_min: 0.8821530288604961
+  description: "Non-distilled track screening: EMA-averaged CTM residual adapter with no distillation and fixed validation prior-logit tau=0.4, chosen from prior non-distilled CTM validation evidence to restore precision; no test-set evaluation"

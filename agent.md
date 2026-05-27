@@ -193,6 +193,11 @@ Keep it short and operational.
   - retain the promoted EMA architecture and fixed validation-only protocol, but disable distillation entirely (`distill_logprobs: null`, `distill_weight: 0.0`) for `autoresearch_yoloctm_nodistill_ema_calselect_priorcal`.
   - rationale: the promoted DKD student may inherit a WM811K-specific teacher bias. A no-distillation EMA control distinguishes gains from EMA/model training versus gains requiring the specialized teacher, without consuming the test lockbox.
   - continue screening against the frozen development baseline val macro F1 `0.918524`; do not test unless it strictly promotes.
+  - track baseline result: `autoresearch_yoloctm_nodistill_ema_calselect_priorcal_20260527_204846`, params `10.525M`, fixed-`tau=0.1` val acc `0.97367`, macro P `0.83977`, macro R `0.93206`, macro F1 `0.882153`; no test metrics generated. Per user direction, this now establishes an independent non-distilled development baseline rather than competing directly with the DKD milestone.
+- Next non-distilled-track candidate selected on 2026-05-27:
+  - keep no-distillation EMA unchanged and adjust only its predeclared validation prior-logit calibration from `tau=0.1` to `tau=0.4`, using prior non-distilled CTM validation evidence rather than test feedback.
+  - rationale: the new no-distillation baseline is strongly recall-heavy and precision-limited; the prior non-distilled CTM adapter previously selected `tau=0.4` on validation, making this a track-specific calibration correction rather than a teacher-dependent change.
+  - promotion threshold for this track is strict improvement above validation macro F1 `0.882153`; `test.enabled: false` remains mandatory.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).
