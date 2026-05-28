@@ -38,7 +38,7 @@ model:
     classifier_cbr_weight: 0.0
     classifier_cbr_power: 1.0
     classifier_cbr_start_epoch: 1
-    loss: ldam_drw
+    loss: weighted_ce
     ldam_max_margin: 0.2
     ldam_start_epoch: 7
     logprob_fusion: false
@@ -53,7 +53,7 @@ model:
     readout: mean
 
 train:
-  epochs: 10
+  epochs: 20
   imgsz: 224
   batch: 64
   micro_batch: 16
@@ -66,7 +66,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_nodistill_ema_ldam_tau04
+  name: autoresearch_yoloctm_nodistill_ema_tau04_e20
   add_timestamp: true
   exist_ok: true
 
@@ -89,4 +89,4 @@ logging:
   autoresearch: true
   status: auto
   keep_val_macro_f1_min: 0.9028144470534541
-  description: "Non-distilled track screening: EMA CTM residual adapter with deferred LDAM-inspired minority target margins (max_margin=0.2 from epoch 7), fixed validation prior-logit tau=0.4, and no distillation or test-set evaluation"
+  description: "Non-distilled track screening: extend the current no-distill EMA tau=0.4 recipe from 10 to 20 epochs to test under-convergence without adding teachers, architecture changes, or test-set evaluation"

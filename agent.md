@@ -204,6 +204,11 @@ Keep it short and operational.
   - implementation is a scoped adaptation: retain the existing weighted cross-entropy and add class-frequency margins only late in training, rather than introducing a teacher or broad sampling change.
   - rationale: after calibrated EMA, remaining validation weakness is concentrated in `Loc` and `Scratch`; deferred minority margins target that deficit while preserving the newly balanced precision/recall operating point.
   - screen only against the non-distilled validation track best `0.902814`; do not generate test metrics unless this independent track later reaches a separately declared milestone.
+  - result: discard `autoresearch_yoloctm_nodistill_ema_ldam_tau04_20260527_224641`, params `10.525M`, fixed-`tau=0.4` val acc `0.97892`, macro P `0.89474`, macro R `0.90187`, macro F1 `0.897267`; no test metrics generated. Deferred margins reduced precision and did not beat the non-distilled track best.
+- Next non-distilled-track candidate selected after LDAM:
+  - revert to the current best no-distillation EMA recipe with fixed `tau=0.4`, and extend training from `10` to `20` epochs.
+  - rationale: the no-distillation EMA models still have comparatively low train accuracy and the 10-epoch calibrated run improved through the final epoch, so under-convergence is a plausible bottleneck. This changes only optimization budget, not teacher use, architecture, data split, or test access.
+  - screen only against the non-distilled validation track best `0.902814`; do not generate test metrics.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).
