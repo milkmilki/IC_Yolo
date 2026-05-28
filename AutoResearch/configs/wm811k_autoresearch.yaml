@@ -39,7 +39,7 @@ model:
     classifier_cbr_power: 1.0
     classifier_cbr_start_epoch: 1
     loss: weighted_ce
-    label_smoothing: 0.05
+    label_smoothing: 0.0
     ldam_max_margin: 0.2
     ldam_start_epoch: 7
     logprob_fusion: false
@@ -58,8 +58,8 @@ train:
   imgsz: 224
   batch: 64
   micro_batch: 16
-  lr: 0.001
-  lr_schedule: constant
+  lr: 0.00125
+  lr_schedule: onecycle
   selection_prior_logit_tau: 0.4
   ema_decay: 0.999
   device: "0"
@@ -69,7 +69,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_nodistill_labelsmooth005_tau04_e10
+  name: autoresearch_yoloctm_nodistill_onecycle_lr00125_tau04_e10
   add_timestamp: true
   exist_ok: true
 
@@ -92,4 +92,4 @@ logging:
   autoresearch: true
   status: auto
   keep_val_macro_f1_min: 0.9028144470534541
-  description: "Non-distilled <=10epoch track screening: same no-distill tau=0.4 EMA weighted-CE recipe with label smoothing 0.05 for milder target regularization after Balanced Softmax over-corrected; no test-set evaluation"
+  description: "Non-distilled <=10epoch track screening: same no-distill tau=0.4 EMA weighted-CE recipe with milder OneCycle max_lr=0.00125 after lr=0.0015 nearly matched the track best but lost recall; no test-set evaluation"
