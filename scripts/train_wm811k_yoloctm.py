@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import math
 import random
 from pathlib import Path
 
@@ -582,6 +583,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--micro-batch", type=int, default=0, help="Per-step batch; 0 uses --batch without accumulation")
     parser.add_argument("--imgsz", type=int, default=224)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr-schedule", choices=["constant", "onecycle"], default="constant")
+    parser.add_argument("--onecycle-pct-start", type=float, default=0.3)
+    parser.add_argument("--onecycle-div-factor", type=float, default=10.0)
+    parser.add_argument("--onecycle-final-div-factor", type=float, default=100.0)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--d-model", type=int, default=256)
     parser.add_argument("--steps", type=int, default=4)
@@ -825,6 +830,7 @@ def train_one_epoch(
     classifier_cbr_weight: float = 0.0,
     classifier_cbr_power: float = 1.0,
     grad_accum_steps: int = 1,
+    scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
 ) -> tuple[float, float]:
     model.train()
     grad_accum_steps = max(1, int(grad_accum_steps))
@@ -892,6 +898,8 @@ def train_one_epoch(
         (loss / float(group_steps)).backward()
         if (batch_index + 1) % grad_accum_steps == 0 or batch_index + 1 == num_batches:
             optimizer.step()
+            if scheduler is not None:
+                scheduler.step()
             if ema_model is not None:
                 update_ema_model(ema_model, model, float(ema_decay))
             optimizer.zero_grad(set_to_none=True)
@@ -1077,6 +1085,26 @@ def main() -> int:
         lr=args.lr,
         weight_decay=args.weight_decay,
     )
+    scheduler = None
+    if args.lr_schedule == "onecycle":
+        if not 0.0 < float(args.onecycle_pct_start) < 1.0:
+            raise ValueError("--onecycle-pct-start must be in (0, 1)")
+        optimizer_steps_per_epoch = max(1, math.ceil(len(natural_train_loader) / float(grad_accum_steps)))
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=float(args.lr),
+            epochs=int(args.epochs),
+            steps_per_epoch=optimizer_steps_per_epoch,
+            pct_start=float(args.onecycle_pct_start),
+            div_factor=float(args.onecycle_div_factor),
+            final_div_factor=float(args.onecycle_final_div_factor),
+        )
+        print(
+            f"[lr_schedule] onecycle max_lr={float(args.lr):.6g} "
+            f"steps_per_epoch={optimizer_steps_per_epoch} pct_start={float(args.onecycle_pct_start):.3f} "
+            f"div_factor={float(args.onecycle_div_factor):.3f} "
+            f"final_div_factor={float(args.onecycle_final_div_factor):.3f}"
+        )
     distill_logprobs = None
     if args.distill_logprobs is not None and float(args.distill_weight) > 0:
         distill_logprobs = load_distill_logprobs(args.distill_logprobs, train_ds)
@@ -1112,6 +1140,10 @@ def main() -> int:
             raise ValueError("Resume checkpoint classes do not match the current training dataset")
         model.load_state_dict(resumed["model_state"], strict=True)
         optimizer.load_state_dict(resumed["optimizer_state"])
+        if scheduler is not None and "scheduler_state" in resumed:
+            scheduler.load_state_dict(resumed["scheduler_state"])
+        elif scheduler is not None:
+            print("[resume] scheduler state missing; OneCycle schedule restarts from current optimizer state")
         if ema_model is not None:
             ema_model.load_state_dict(resumed.get("ema_model_state", resumed["model_state"]), strict=True)
         best_val_f1 = float(resumed.get("best_val_macro_f1", 0.0))
@@ -1151,6 +1183,8 @@ def main() -> int:
         }
         if include_optimizer:
             payload["optimizer_state"] = optimizer.state_dict()
+            if scheduler is not None:
+                payload["scheduler_state"] = scheduler.state_dict()
             if ema_model is not None:
                 payload["ema_model_state"] = ema_model.state_dict()
         return payload
@@ -1191,6 +1225,7 @@ def main() -> int:
             classifier_cbr_weight=classifier_cbr_weight,
             classifier_cbr_power=float(args.classifier_cbr_power),
             grad_accum_steps=grad_accum_steps,
+            scheduler=scheduler,
         )
         selection_model = ema_model if ema_model is not None else model
         val_loss, val_acc, val_macro_f1 = evaluate(
