@@ -221,6 +221,11 @@ Keep it short and operational.
   - keep the `10`-epoch no-distillation `tau=0.4` recipe and change only EMA decay from `0.999` to `0.9995`.
   - rationale: over-budget diagnostics showed later EMA checkpoints can raise precision substantially; a slower EMA may move some of that smoothing benefit into the fixed 10-epoch budget without changing teachers, data, architecture, or test access.
   - screen only against the eligible non-distilled validation track best `0.902814`; do not generate test metrics.
+  - result: discard `autoresearch_yoloctm_nodistill_ema9995_tau04_e10_20260528_153437`, params `10.525M`, fixed-`tau=0.4` val acc `0.97953`, macro P `0.89362`, macro R `0.91191`, macro F1 `0.902032`; no test metrics generated. Slower EMA almost matched the eligible best but lagged slightly, suggesting the 10-epoch budget needs faster optimization rather than additional averaging inertia.
+- Next eligible non-distilled-track candidate selected after EMA 0.9995:
+  - add a OneCycle/super-convergence learning-rate schedule for the same `10`-epoch no-distillation `tau=0.4`, EMA `0.999` recipe; start with `max_lr=0.002`.
+  - rationale: the e20/e30 diagnostics and epoch-10 trend show under-convergence inside the hard 10-epoch budget. OneCycle is a paper-supported way to use a brief high-LR phase plus annealing to improve performance in a fixed short training budget without teachers, data changes, architecture changes, or test access.
+  - screen only against the eligible non-distilled validation track best `0.902814`; do not generate test metrics.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).
