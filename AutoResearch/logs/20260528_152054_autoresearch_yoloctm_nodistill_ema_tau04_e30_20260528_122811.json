@@ -1,7 +1,7 @@
 {
   "row": {
     "timestamp": "2026-05-28T15:20:54",
-    "status": "track_best",
+    "status": "diagnostic_over_budget",
     "algorithm": "yoloctm",
     "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_nodistill_ema_tau04_e30_20260528_122811",
     "params_m": "10.525",
@@ -18,7 +18,7 @@
     "test_macro_p": "",
     "test_macro_r": "",
     "test_macro_f1": "",
-    "description": "Non-distilled track best: extending no-distill EMA tau=0.4 to 30 epochs improved validation macro F1 without teachers, architecture changes, or test-set evaluation."
+    "description": "Over-budget diagnostic only: extending no-distill EMA tau=0.4 to 30 epochs improved validation macro F1, but final non-distilled track scoring is constrained to <=10 epochs."
   },
   "config": {
     "dataset": {

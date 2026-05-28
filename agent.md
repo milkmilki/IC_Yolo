@@ -209,16 +209,18 @@ Keep it short and operational.
   - revert to the current best no-distillation EMA recipe with fixed `tau=0.4`, and extend training from `10` to `20` epochs.
   - rationale: the no-distillation EMA models still have comparatively low train accuracy and the 10-epoch calibrated run improved through the final epoch, so under-convergence is a plausible bottleneck. This changes only optimization budget, not teacher use, architecture, data split, or test access.
   - screen only against the non-distilled validation track best `0.902814`; do not generate test metrics.
-  - result: track best `autoresearch_yoloctm_nodistill_ema_tau04_e20_20260528_102736`, params `10.525M`, fixed-`tau=0.4` val acc `0.98169`, macro P `0.92070`, macro R `0.91070`, macro F1 `0.915030`; no test metrics generated.
+  - result: over-budget diagnostic `autoresearch_yoloctm_nodistill_ema_tau04_e20_20260528_102736`, params `10.525M`, fixed-`tau=0.4` val acc `0.98169`, macro P `0.92070`, macro R `0.91070`, macro F1 `0.915030`; no test metrics generated. Per user correction on 2026-05-28, final non-distilled scoring is constrained to `<=10` epochs, so this does not count as track best.
 - Next non-distilled-track candidate selected after e20:
   - keep the same no-distillation EMA `tau=0.4` recipe and extend from `20` to `30` epochs.
   - rationale: validation macro F1 was still at its best on epoch `20`, and train accuracy remained only `0.9713`, so additional training budget is still a plausible non-teacher improvement.
   - screen only against the non-distilled validation track best `0.915030`; do not generate test metrics.
-  - result: track best `autoresearch_yoloctm_nodistill_ema_tau04_e30_20260528_122811`, params `10.525M`, fixed-`tau=0.4` val acc `0.98265`, macro P `0.93090`, macro R `0.91030`, macro F1 `0.919511`; no test metrics generated.
-- Next non-distilled-track candidate selected after e30:
-  - keep the 30-epoch no-distillation `tau=0.4` recipe and change only EMA decay from `0.999` to `0.9995`.
-  - rationale: the e30 run peaked at epoch `25` and then became volatile, so a slower EMA may preserve the strong precision gain while smoothing late-epoch drift.
-  - screen only against the non-distilled validation track best `0.919511`; do not generate test metrics.
+  - result: over-budget diagnostic `autoresearch_yoloctm_nodistill_ema_tau04_e30_20260528_122811`, params `10.525M`, fixed-`tau=0.4` val acc `0.98265`, macro P `0.93090`, macro R `0.91030`, macro F1 `0.919511`; no test metrics generated. This confirms more optimization helps, but it is not eligible for the final `<=10` epoch track.
+- Current eligible non-distilled track best after user correction:
+  - `autoresearch_yoloctm_nodistill_ema_tau04_calselect_20260527_214912`, params `10.525M`, `10` epochs, fixed-`tau=0.4` val macro F1 `0.902814`; no test metrics generated.
+- Next eligible non-distilled-track candidate selected on 2026-05-28:
+  - keep the `10`-epoch no-distillation `tau=0.4` recipe and change only EMA decay from `0.999` to `0.9995`.
+  - rationale: over-budget diagnostics showed later EMA checkpoints can raise precision substantially; a slower EMA may move some of that smoothing benefit into the fixed 10-epoch budget without changing teachers, data, architecture, or test access.
+  - screen only against the eligible non-distilled validation track best `0.902814`; do not generate test metrics.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).
