@@ -57,7 +57,7 @@ train:
   imgsz: 224
   batch: 64
   micro_batch: 16
-  lr: 0.002
+  lr: 0.0015
   lr_schedule: onecycle
   onecycle_pct_start: 0.3
   onecycle_div_factor: 10.0
@@ -71,7 +71,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_nodistill_onecycle_lr002_tau04_e10
+  name: autoresearch_yoloctm_nodistill_onecycle_lr0015_tau04_e10
   add_timestamp: true
   exist_ok: true
 
@@ -94,4 +94,4 @@ logging:
   autoresearch: true
   status: auto
   keep_val_macro_f1_min: 0.9028144470534541
-  description: "Non-distilled <=10epoch track screening: same no-distill tau=0.4 EMA recipe with OneCycle max_lr=0.002 to compress convergence into 10 epochs; no test-set evaluation"
+  description: "Non-distilled <=10epoch track screening: same no-distill tau=0.4 EMA recipe with milder OneCycle max_lr=0.0015 after lr=0.002 proved unstable; no test-set evaluation"
