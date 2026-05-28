@@ -62,7 +62,7 @@ train:
   lr_schedule: onecycle
   selection_prior_logit_tau: 0.4
   ema_decay: 0.999
-  device: "0"
+  device: cpu
   workers: 0
   sampling: natural
   none_sampling_ratio: 0.75
