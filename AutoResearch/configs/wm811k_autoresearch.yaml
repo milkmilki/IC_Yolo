@@ -58,7 +58,7 @@ train:
   batch: 64
   micro_batch: 16
   selection_prior_logit_tau: 0.4
-  ema_decay: 0.999
+  ema_decay: 0.9995
   device: "0"
   workers: 0
   sampling: natural
@@ -66,7 +66,7 @@ train:
   sampling_start_epoch: 1
   patience: 20
   project: runs/classify
-  name: autoresearch_yoloctm_nodistill_ema_tau04_e30
+  name: autoresearch_yoloctm_nodistill_ema9995_tau04_e30
   add_timestamp: true
   exist_ok: true
 
@@ -88,5 +88,5 @@ logging:
   filename: pipeline.log
   autoresearch: true
   status: auto
-  keep_val_macro_f1_min: 0.9150304631581716
-  description: "Non-distilled track screening: extend the current no-distill EMA tau=0.4 recipe from 20 to 30 epochs to test remaining under-convergence without teachers, architecture changes, or test-set evaluation"
+  keep_val_macro_f1_min: 0.9195112171535741
+  description: "Non-distilled track screening: same 30-epoch no-distill tau=0.4 recipe with a slower EMA decay of 0.9995 to smooth late-epoch validation volatility; no test-set evaluation"

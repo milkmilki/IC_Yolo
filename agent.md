@@ -214,6 +214,11 @@ Keep it short and operational.
   - keep the same no-distillation EMA `tau=0.4` recipe and extend from `20` to `30` epochs.
   - rationale: validation macro F1 was still at its best on epoch `20`, and train accuracy remained only `0.9713`, so additional training budget is still a plausible non-teacher improvement.
   - screen only against the non-distilled validation track best `0.915030`; do not generate test metrics.
+  - result: track best `autoresearch_yoloctm_nodistill_ema_tau04_e30_20260528_122811`, params `10.525M`, fixed-`tau=0.4` val acc `0.98265`, macro P `0.93090`, macro R `0.91030`, macro F1 `0.919511`; no test metrics generated.
+- Next non-distilled-track candidate selected after e30:
+  - keep the 30-epoch no-distillation `tau=0.4` recipe and change only EMA decay from `0.999` to `0.9995`.
+  - rationale: the e30 run peaked at epoch `25` and then became volatile, so a slower EMA may preserve the strong precision gain while smoothing late-epoch drift.
+  - screen only against the non-distilled validation track best `0.919511`; do not generate test metrics.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).
