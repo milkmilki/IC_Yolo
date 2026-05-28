@@ -231,6 +231,11 @@ Keep it short and operational.
   - keep the same `10`-epoch no-distillation `tau=0.4`, EMA `0.999`, OneCycle schedule and lower only `max_lr` from `0.002` to `0.0015`.
   - rationale: the `0.002` run reached strong early validation accuracy but unstable macro F1, consistent with an overly aggressive high-LR peak. A milder peak keeps the super-convergence idea while reducing minority-class disruption.
   - screen only against the eligible non-distilled validation track best `0.902814`; do not generate test metrics.
+  - result: discard `autoresearch_yoloctm_nodistill_onecycle_lr0015_tau04_e10_20260528_192905`, params `10.525M`, fixed-`tau=0.4` val acc `0.98123`, macro P `0.91437`, macro R `0.89218`, macro F1 `0.902473`; no test metrics generated. This nearly matched the eligible best but remained below threshold; OneCycle improved convergence speed but still lost too much recall.
+- Next eligible non-distilled-track candidate selected after OneCycle screens:
+  - return to the stable `10`-epoch no-distillation EMA `0.999`, fixed-`tau=0.4`, constant-lr recipe and change only the training loss from weighted cross-entropy to Balanced Softmax.
+  - rationale: the remaining gap is dominated by long-tail minority behavior. Balanced Softmax is a long-tailed recognition loss that corrects class-prior bias in the softmax denominator without teachers, extra inference parameters, data changes, or test access.
+  - screen only against the eligible non-distilled validation track best `0.902814`; do not generate test metrics.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).
