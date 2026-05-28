@@ -237,6 +237,10 @@ Keep it short and operational.
   - rationale: the remaining gap is dominated by long-tail minority behavior. Balanced Softmax is a long-tailed recognition loss that corrects class-prior bias in the softmax denominator without teachers, extra inference parameters, data changes, or test access.
   - screen only against the eligible non-distilled validation track best `0.902814`; do not generate test metrics.
   - result: discard `autoresearch_yoloctm_nodistill_balancedsoftmax_tau04_e10_20260528_222410`, params `10.525M`, fixed-`tau=0.4` val acc `0.96843`, macro P `0.81699`, macro R `0.93652`, macro F1 `0.869342`; no test metrics generated. Balanced Softmax over-corrected the long-tail prior, raising recall while collapsing precision, so the next no-distillation candidate should return to weighted CE and use milder regularization.
+- Next eligible non-distilled-track candidate selected after Balanced Softmax:
+  - return to weighted CE with the stable `10`-epoch no-distillation EMA `0.999`, fixed-`tau=0.4`, constant-lr recipe and add only label smoothing `0.05`.
+  - rationale: label smoothing is a training-only target regularizer that can reduce overconfident class-boundary decisions without adding teachers, inference parameters, test access, or data changes. It is intentionally milder than Balanced Softmax after the prior-correction run collapsed precision.
+  - screen only against the eligible non-distilled validation track best `0.902814`; do not generate test metrics.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).

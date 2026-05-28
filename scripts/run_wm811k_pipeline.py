@@ -365,6 +365,8 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str, resume_checkpoint
         str(ctm_config.get("classifier_cbr_start_epoch", 1)),
         "--loss",
         str(ctm_config.get("loss", "weighted_ce")),
+        "--label-smoothing",
+        str(ctm_config.get("label_smoothing", 0.0)),
         "--ldam-max-margin",
         str(ctm_config.get("ldam_max_margin", 0.2)),
         "--ldam-start-epoch",

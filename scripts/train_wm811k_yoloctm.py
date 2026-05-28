@@ -635,6 +635,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax", "ldam_drw"], default="weighted_ce")
+    parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--ldam-max-margin", type=float, default=0.2)
     parser.add_argument("--ldam-start-epoch", type=int, default=7)
     parser.add_argument("--train-sampling", choices=["natural", "none_aware"], default="natural")
@@ -1073,7 +1074,12 @@ def main() -> int:
     else:
         class_weights = (class_counts.sum() / class_counts.clamp(min=1.0)).pow(args.class_weight_power)
         class_weights = (class_weights / class_weights.mean()).to(device)
-        criterion = nn.CrossEntropyLoss(weight=class_weights)
+        label_smoothing = float(args.label_smoothing)
+        if not 0.0 <= label_smoothing < 1.0:
+            raise ValueError("--label-smoothing must be in [0, 1)")
+        criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=label_smoothing)
+        if label_smoothing > 0:
+            print(f"[loss] weighted CE label_smoothing={label_smoothing:.4f}")
         if args.loss == "ldam_drw":
             ldam_criterion = LDAMLoss(class_counts, float(args.ldam_max_margin), class_weights).to(device)
             print(
