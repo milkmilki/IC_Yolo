@@ -587,6 +587,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--onecycle-pct-start", type=float, default=0.3)
     parser.add_argument("--onecycle-div-factor", type=float, default=10.0)
     parser.add_argument("--onecycle-final-div-factor", type=float, default=100.0)
+    parser.add_argument("--sam-rho", type=float, default=0.0)
+    parser.add_argument("--sam-adaptive", action="store_true")
+    parser.add_argument("--no-sam-adaptive", dest="sam_adaptive", action="store_false")
+    parser.set_defaults(sam_adaptive=False)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--d-model", type=int, default=256)
     parser.add_argument("--steps", type=int, default=4)
@@ -758,6 +762,52 @@ def update_ema_model(ema_model: nn.Module, model: nn.Module, decay: float) -> No
             averaged.copy_(current)
 
 
+def sam_grad_norm(optimizer: torch.optim.Optimizer, adaptive: bool = False) -> torch.Tensor:
+    norms: list[torch.Tensor] = []
+    shared_device: torch.device | None = None
+    for group in optimizer.param_groups:
+        for parameter in group["params"]:
+            if parameter.grad is None:
+                continue
+            shared_device = parameter.device
+            grad = parameter.grad
+            if adaptive:
+                grad = grad * parameter.detach().abs()
+            norms.append(grad.norm(p=2).to(shared_device))
+    if not norms:
+        if shared_device is None:
+            shared_device = torch.device("cpu")
+        return torch.zeros((), device=shared_device)
+    return torch.norm(torch.stack(norms), p=2)
+
+
+@torch.no_grad()
+def sam_first_step(
+    optimizer: torch.optim.Optimizer,
+    rho: float,
+    adaptive: bool = False,
+) -> dict[torch.nn.Parameter, torch.Tensor]:
+    grad_norm = sam_grad_norm(optimizer, adaptive=adaptive)
+    scale = float(rho) / (grad_norm + 1e-12)
+    perturbations: dict[torch.nn.Parameter, torch.Tensor] = {}
+    for group in optimizer.param_groups:
+        for parameter in group["params"]:
+            if parameter.grad is None:
+                continue
+            perturbation = parameter.grad * scale.to(parameter)
+            if adaptive:
+                perturbation = perturbation * parameter.detach().pow(2)
+            parameter.add_(perturbation)
+            perturbations[parameter] = perturbation
+    return perturbations
+
+
+@torch.no_grad()
+def sam_restore(perturbations: dict[torch.nn.Parameter, torch.Tensor]) -> None:
+    for parameter, perturbation in perturbations.items():
+        parameter.sub_(perturbation)
+
+
 def classifier_cbr_loss(model: nn.Module, class_counts: torch.Tensor, power: float = 1.0) -> torch.Tensor:
     weights: list[torch.Tensor] = []
     yolo_linear = getattr(getattr(model, "yolo_head", None), "linear", None)
@@ -811,6 +861,78 @@ def load_distill_logprobs(path: Path, train_ds: datasets.ImageFolder) -> torch.T
     return torch.from_numpy(log_probs)
 
 
+def compute_train_loss_and_logits(
+    model: nn.Module,
+    images: torch.Tensor,
+    labels: torch.Tensor,
+    indices: torch.Tensor | None,
+    criterion: nn.Module,
+    aux_loss_weight: float = 0.0,
+    anchor_loss_weight: float = 0.0,
+    distill_logprobs: torch.Tensor | None = None,
+    distill_weight: float = 0.0,
+    distill_temperature: float = 2.0,
+    distill_mode: str = "full",
+    prototype_bcl_weight: float = 0.0,
+    prototype_bcl_temperature: float = 0.1,
+    class_counts: torch.Tensor | None = None,
+    classifier_cbr_weight: float = 0.0,
+    classifier_cbr_power: float = 1.0,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    need_embedding = float(prototype_bcl_weight) > 0
+    embedding = None
+    if aux_loss_weight > 0 and anchor_loss_weight > 0:
+        outputs = model(images, return_aux=True, return_clean=True, return_embedding=need_embedding)
+        logits, ctm_logits, clean_logits = outputs[:3]
+        embedding = outputs[-1] if need_embedding else None
+        loss = (
+            criterion(logits, labels)
+            + aux_loss_weight * criterion(ctm_logits, labels)
+            + anchor_loss_weight * anchor_kl_loss(logits, clean_logits)
+        )
+    elif aux_loss_weight > 0:
+        outputs = model(images, return_aux=True, return_embedding=need_embedding)
+        logits, ctm_logits = outputs[:2]
+        embedding = outputs[-1] if need_embedding else None
+        loss = criterion(logits, labels) + aux_loss_weight * criterion(ctm_logits, labels)
+    elif anchor_loss_weight > 0:
+        outputs = model(images, return_clean=True, return_embedding=need_embedding)
+        logits, clean_logits = outputs[:2]
+        embedding = outputs[-1] if need_embedding else None
+        loss = criterion(logits, labels) + anchor_loss_weight * anchor_kl_loss(logits, clean_logits)
+    elif need_embedding:
+        logits, embedding = model(images, return_embedding=True)
+        loss = criterion(logits, labels)
+    else:
+        logits = model(images)
+        loss = criterion(logits, labels)
+    if distill_logprobs is not None and indices is not None and distill_weight > 0:
+        teacher_log_probs = distill_logprobs[indices].to(device=images.device, non_blocking=True)
+        loss = loss + float(distill_weight) * distillation_loss(
+            logits,
+            teacher_log_probs,
+            distill_temperature,
+            labels=labels,
+            mode=distill_mode,
+        )
+    if need_embedding:
+        if embedding is None or not isinstance(getattr(model, "ctm_cls", None), nn.Linear):
+            raise RuntimeError("prototype complement loss requires CTM embeddings and classifier prototypes")
+        loss = loss + float(prototype_bcl_weight) * prototype_complement_loss(
+            embedding,
+            model.ctm_cls.weight,
+            labels,
+            prototype_bcl_temperature,
+        )
+    if class_counts is not None and classifier_cbr_weight > 0:
+        loss = loss + float(classifier_cbr_weight) * classifier_cbr_loss(
+            model,
+            class_counts,
+            power=float(classifier_cbr_power),
+        )
+    return loss, logits
+
+
 def train_one_epoch(
     model: nn.Module,
     loader: DataLoader,
@@ -832,6 +954,8 @@ def train_one_epoch(
     classifier_cbr_power: float = 1.0,
     grad_accum_steps: int = 1,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
+    sam_rho: float = 0.0,
+    sam_adaptive: bool = False,
 ) -> tuple[float, float]:
     model.train()
     grad_accum_steps = max(1, int(grad_accum_steps))
@@ -840,73 +964,79 @@ def train_one_epoch(
     total = 0
     optimizer.zero_grad(set_to_none=True)
     num_batches = len(loader)
+    use_sam = float(sam_rho) > 0
+    group_buffer: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]] = []
+
+    def forward_loss(
+        images: torch.Tensor,
+        labels: torch.Tensor,
+        indices: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        return compute_train_loss_and_logits(
+            model,
+            images,
+            labels,
+            indices,
+            criterion,
+            aux_loss_weight=aux_loss_weight,
+            anchor_loss_weight=anchor_loss_weight,
+            distill_logprobs=distill_logprobs,
+            distill_weight=distill_weight,
+            distill_temperature=distill_temperature,
+            distill_mode=distill_mode,
+            prototype_bcl_weight=prototype_bcl_weight,
+            prototype_bcl_temperature=prototype_bcl_temperature,
+            class_counts=class_counts,
+            classifier_cbr_weight=classifier_cbr_weight,
+            classifier_cbr_power=classifier_cbr_power,
+        )
+
     for batch_index, batch in enumerate(loader):
         images, labels, indices = unpack_batch(batch)
         images, labels = images.to(device), labels.to(device)
-        need_embedding = float(prototype_bcl_weight) > 0
-        embedding = None
-        if aux_loss_weight > 0 and anchor_loss_weight > 0:
-            outputs = model(images, return_aux=True, return_clean=True, return_embedding=need_embedding)
-            logits, ctm_logits, clean_logits = outputs[:3]
-            embedding = outputs[-1] if need_embedding else None
-            loss = (
-                criterion(logits, labels)
-                + aux_loss_weight * criterion(ctm_logits, labels)
-                + anchor_loss_weight * anchor_kl_loss(logits, clean_logits)
-            )
-        elif aux_loss_weight > 0:
-            outputs = model(images, return_aux=True, return_embedding=need_embedding)
-            logits, ctm_logits = outputs[:2]
-            embedding = outputs[-1] if need_embedding else None
-            loss = criterion(logits, labels) + aux_loss_weight * criterion(ctm_logits, labels)
-        elif anchor_loss_weight > 0:
-            outputs = model(images, return_clean=True, return_embedding=need_embedding)
-            logits, clean_logits = outputs[:2]
-            embedding = outputs[-1] if need_embedding else None
-            loss = criterion(logits, labels) + anchor_loss_weight * anchor_kl_loss(logits, clean_logits)
-        elif need_embedding:
-            logits, embedding = model(images, return_embedding=True)
-            loss = criterion(logits, labels)
-        else:
-            logits = model(images)
-            loss = criterion(logits, labels)
-        if distill_logprobs is not None and indices is not None and distill_weight > 0:
-            teacher_log_probs = distill_logprobs[indices].to(device=device, non_blocking=True)
-            loss = loss + float(distill_weight) * distillation_loss(
-                logits,
-                teacher_log_probs,
-                distill_temperature,
-                labels=labels,
-                mode=distill_mode,
-            )
-        if need_embedding:
-            if embedding is None or not isinstance(getattr(model, "ctm_cls", None), nn.Linear):
-                raise RuntimeError("prototype complement loss requires CTM embeddings and classifier prototypes")
-            loss = loss + float(prototype_bcl_weight) * prototype_complement_loss(
-                embedding,
-                model.ctm_cls.weight,
-                labels,
-                prototype_bcl_temperature,
-            )
-        if class_counts is not None and classifier_cbr_weight > 0:
-            loss = loss + float(classifier_cbr_weight) * classifier_cbr_loss(
-                model,
-                class_counts,
-                power=float(classifier_cbr_power),
-            )
-        group_start = (batch_index // grad_accum_steps) * grad_accum_steps
-        group_steps = min(grad_accum_steps, num_batches - group_start)
-        (loss / float(group_steps)).backward()
-        if (batch_index + 1) % grad_accum_steps == 0 or batch_index + 1 == num_batches:
-            optimizer.step()
-            if scheduler is not None:
-                scheduler.step()
-            if ema_model is not None:
-                update_ema_model(ema_model, model, float(ema_decay))
-            optimizer.zero_grad(set_to_none=True)
-        total_loss += loss.item() * labels.size(0)
-        correct += (logits.argmax(dim=1) == labels).sum().item()
-        total += labels.size(0)
+        if not use_sam:
+            loss, logits = forward_loss(images, labels, indices)
+            group_start = (batch_index // grad_accum_steps) * grad_accum_steps
+            group_steps = min(grad_accum_steps, num_batches - group_start)
+            (loss / float(group_steps)).backward()
+            if (batch_index + 1) % grad_accum_steps == 0 or batch_index + 1 == num_batches:
+                optimizer.step()
+                if scheduler is not None:
+                    scheduler.step()
+                if ema_model is not None:
+                    update_ema_model(ema_model, model, float(ema_decay))
+                optimizer.zero_grad(set_to_none=True)
+            total_loss += loss.item() * labels.size(0)
+            correct += (logits.argmax(dim=1) == labels).sum().item()
+            total += labels.size(0)
+            continue
+
+        group_buffer.append((images, labels, indices))
+        if (batch_index + 1) % grad_accum_steps != 0 and batch_index + 1 != num_batches:
+            continue
+
+        group_steps = len(group_buffer)
+        optimizer.zero_grad(set_to_none=True)
+        for group_images, group_labels, group_indices in group_buffer:
+            loss, logits = forward_loss(group_images, group_labels, group_indices)
+            (loss / float(group_steps)).backward()
+            total_loss += loss.item() * group_labels.size(0)
+            correct += (logits.argmax(dim=1) == group_labels).sum().item()
+            total += group_labels.size(0)
+
+        perturbations = sam_first_step(optimizer, rho=float(sam_rho), adaptive=bool(sam_adaptive))
+        optimizer.zero_grad(set_to_none=True)
+        for group_images, group_labels, group_indices in group_buffer:
+            loss, _logits = forward_loss(group_images, group_labels, group_indices)
+            (loss / float(group_steps)).backward()
+        sam_restore(perturbations)
+        optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
+        if ema_model is not None:
+            update_ema_model(ema_model, model, float(ema_decay))
+        optimizer.zero_grad(set_to_none=True)
+        group_buffer.clear()
     return total_loss / max(total, 1), correct / max(total, 1)
 
 
@@ -1091,6 +1221,10 @@ def main() -> int:
         lr=args.lr,
         weight_decay=args.weight_decay,
     )
+    if float(args.sam_rho) < 0:
+        raise ValueError("--sam-rho must be non-negative")
+    if float(args.sam_rho) > 0:
+        print(f"[sam] rho={float(args.sam_rho):.4f} adaptive={bool(args.sam_adaptive)}")
     scheduler = None
     if args.lr_schedule == "onecycle":
         if not 0.0 < float(args.onecycle_pct_start) < 1.0:
@@ -1214,7 +1348,7 @@ def main() -> int:
         train_loss, train_acc = train_one_epoch(
             model,
             train_loader,
-            criterion,
+            train_criterion,
             optimizer,
             device,
             aux_loss_weight=float(args.aux_loss_weight),
@@ -1232,6 +1366,8 @@ def main() -> int:
             classifier_cbr_power=float(args.classifier_cbr_power),
             grad_accum_steps=grad_accum_steps,
             scheduler=scheduler,
+            sam_rho=float(args.sam_rho),
+            sam_adaptive=bool(args.sam_adaptive),
         )
         selection_model = ema_model if ema_model is not None else model
         val_loss, val_acc, val_macro_f1 = evaluate(

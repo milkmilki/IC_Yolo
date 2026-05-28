@@ -60,6 +60,8 @@ train:
   micro_batch: 16
   lr: 0.00125
   lr_schedule: onecycle
+  sam_rho: 0.0
+  sam_adaptive: false
   selection_prior_logit_tau: 0.4
   ema_decay: 0.999
   device: cpu
