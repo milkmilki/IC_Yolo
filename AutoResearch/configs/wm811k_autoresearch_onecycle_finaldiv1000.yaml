@@ -98,5 +98,5 @@ logging:
   filename: pipeline.log
   autoresearch: true
   status: auto
-  keep_val_macro_f1_min: 0.9031118086245977
+  keep_val_macro_f1_min: 0.9092079916730437
   description: "Non-distilled <=10epoch track screening: same AdamW OneCycle max_lr=0.00125 EMA tau=0.4 recipe, changing only onecycle_final_div_factor from 100 to 1000 for stronger late annealing; no test-set evaluation"

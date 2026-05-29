@@ -93,5 +93,5 @@ logging:
   filename: pipeline.log
   autoresearch: true
   status: auto
-  keep_val_macro_f1_min: 0.9031118086245977
+  keep_val_macro_f1_min: 0.9092079916730437
   description: "Non-distilled <=10epoch track screening: stable constant-lr EMA tau=0.4 recipe with SAM rho=0.05 for flatter-minima generalization; no distillation and no test-set evaluation"

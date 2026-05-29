@@ -101,5 +101,5 @@ logging:
   filename: pipeline.log
   autoresearch: true
   status: auto
-  keep_val_macro_f1_min: 0.9031118086245977
+  keep_val_macro_f1_min: 0.9092079916730437
   description: "Non-distilled <=10epoch track screening: replace AdamW with Lion sign-momentum optimizer using paper-recommended lower LR / higher WD scaling, retaining OneCycle, EMA tau=0.4, no distillation, and no test-set evaluation"
