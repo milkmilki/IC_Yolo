@@ -101,6 +101,9 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
     train_sampling = train_cfg.get("sampling") or checkpoint_meta.get("train_sampling")
     none_sampling_ratio = train_cfg.get("none_sampling_ratio") or checkpoint_meta.get("none_sampling_ratio")
     sampling_start_epoch = train_cfg.get("sampling_start_epoch") or checkpoint_meta.get("train_sampling_start_epoch")
+    optimizer = train_cfg.get("optimizer") or checkpoint_meta.get("optimizer")
+    lion_beta1 = train_cfg.get("lion_beta1") or checkpoint_meta.get("lion_beta1")
+    lion_beta2 = train_cfg.get("lion_beta2") or checkpoint_meta.get("lion_beta2")
 
     if algorithm == "yoloctm":
         summary = (
@@ -139,6 +142,10 @@ def summarize_model(config: dict[str, Any], checkpoint_meta: dict[str, Any], alg
             summary += f" | spatial={spatial_encoding}(scale={spatial_encoding_scale_init})"
         if token_mixer and token_mixer != "none":
             summary += f" | mixer={token_mixer}(scale={scan_scale_init})"
+        if optimizer and optimizer != "adamw":
+            summary += f" | opt={optimizer}"
+            if optimizer == "lion" and lion_beta1 is not None and lion_beta2 is not None:
+                summary += f"(b={lion_beta1},{lion_beta2})"
         if train_sampling and train_sampling != "natural":
             summary += f" | sampling={train_sampling}"
             if none_sampling_ratio is not None:

@@ -78,6 +78,55 @@ def build_none_aware_sampler(
     )
 
 
+class Lion(torch.optim.Optimizer):
+    """EvoLved Sign Momentum optimizer with decoupled weight decay."""
+
+    def __init__(
+        self,
+        params,
+        lr: float = 1e-4,
+        betas: tuple[float, float] = (0.9, 0.99),
+        weight_decay: float = 0.0,
+    ) -> None:
+        if lr <= 0.0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError(f"Invalid beta1 value: {betas[0]}")
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError(f"Invalid beta2 value: {betas[1]}")
+        if weight_decay < 0.0:
+            raise ValueError(f"Invalid weight_decay value: {weight_decay}")
+        defaults = {"lr": lr, "betas": betas, "weight_decay": weight_decay}
+        super().__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+        for group in self.param_groups:
+            lr = group["lr"]
+            beta1, beta2 = group["betas"]
+            weight_decay = group["weight_decay"]
+            for parameter in group["params"]:
+                if parameter.grad is None:
+                    continue
+                grad = parameter.grad
+                if grad.is_sparse:
+                    raise RuntimeError("Lion does not support sparse gradients")
+                if weight_decay != 0.0:
+                    parameter.mul_(1.0 - lr * weight_decay)
+                state = self.state[parameter]
+                if len(state) == 0:
+                    state["exp_avg"] = torch.zeros_like(parameter)
+                exp_avg = state["exp_avg"]
+                update = exp_avg.mul(beta1).add(grad, alpha=1.0 - beta1)
+                parameter.add_(update.sign(), alpha=-lr)
+                exp_avg.mul_(beta2).add_(grad, alpha=1.0 - beta2)
+        return loss
+
+
 class WaferToTensor:
     def __call__(self, image) -> torch.Tensor:
         array = np.array(image, copy=True)
@@ -591,6 +640,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sam-adaptive", action="store_true")
     parser.add_argument("--no-sam-adaptive", dest="sam_adaptive", action="store_false")
     parser.set_defaults(sam_adaptive=False)
+    parser.add_argument("--optimizer", choices=["adamw", "lion"], default="adamw")
+    parser.add_argument("--lion-beta1", type=float, default=0.9)
+    parser.add_argument("--lion-beta2", type=float, default=0.99)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--d-model", type=int, default=256)
     parser.add_argument("--steps", type=int, default=4)
@@ -1216,11 +1268,26 @@ def main() -> int:
                 f"[ldam] max_margin={float(args.ldam_max_margin):.4f} "
                 f"starts at epoch {int(args.ldam_start_epoch)}"
             )
-    optimizer = torch.optim.AdamW(
-        [parameter for parameter in model.parameters() if parameter.requires_grad],
-        lr=args.lr,
-        weight_decay=args.weight_decay,
-    )
+    optim_params = [parameter for parameter in model.parameters() if parameter.requires_grad]
+    if args.optimizer == "lion":
+        optimizer = Lion(
+            optim_params,
+            lr=float(args.lr),
+            betas=(float(args.lion_beta1), float(args.lion_beta2)),
+            weight_decay=float(args.weight_decay),
+        )
+        print(
+            f"[optimizer] lion lr={float(args.lr):.6g} "
+            f"betas=({float(args.lion_beta1):.3f},{float(args.lion_beta2):.3f}) "
+            f"weight_decay={float(args.weight_decay):.6g}"
+        )
+    else:
+        optimizer = torch.optim.AdamW(
+            optim_params,
+            lr=args.lr,
+            weight_decay=args.weight_decay,
+        )
+        print(f"[optimizer] adamw lr={float(args.lr):.6g} weight_decay={float(args.weight_decay):.6g}")
     if float(args.sam_rho) < 0:
         raise ValueError("--sam-rho must be non-negative")
     if float(args.sam_rho) > 0:
@@ -1318,6 +1385,10 @@ def main() -> int:
             "classifier_cbr_power": float(args.classifier_cbr_power),
             "classifier_cbr_start_epoch": int(args.classifier_cbr_start_epoch),
             "ema_decay": float(args.ema_decay),
+            "optimizer": str(args.optimizer),
+            "lion_beta1": float(args.lion_beta1),
+            "lion_beta2": float(args.lion_beta2),
+            "weight_decay": float(args.weight_decay),
             "epoch": epoch,
             "history": history,
         }
