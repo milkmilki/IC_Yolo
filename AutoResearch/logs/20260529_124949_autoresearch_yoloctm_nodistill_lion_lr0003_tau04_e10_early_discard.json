@@ -1,0 +1,18 @@
+﻿{
+    "status":  "early_discard",
+    "run_dir":  "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_nodistill_lion_lr0003_tau04_e10_20260529_114820",
+    "algorithm":  "yoloctm",
+    "epochs":  10,
+    "stopped_after_epoch":  3,
+    "best_observed_val_macro_f1":  0.833,
+    "threshold_val_macro_f1":  0.90311180862459772,
+    "device":  "0",
+    "optimizer":  "lion",
+    "lr":  0.0003,
+    "weight_decay":  0.001,
+    "reason":  "Early-discarded Lion optimizer screen at epoch 3 because validation macro F1 remained far below the incumbent-matching AdamW OneCycle trajectory (best observed 0.8330 vs incumbent epoch-3 0.8657); no test-set evaluation.",
+    "checkpoint_present":  true,
+    "best_checkpoint_present":  true,
+    "pipeline_log":  "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_nodistill_lion_lr0003_tau04_e10_20260529_114820\\pipeline.log",
+    "timestamp":  "2026-05-29T12:49:49"
+}
