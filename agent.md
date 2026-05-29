@@ -251,15 +251,16 @@ Keep it short and operational.
   - result: new eligible track best `autoresearch_yoloctm_nodistill_onecycle_lr00125_tau04_e10_20260529_032835`, params `10.525M`, fixed-`tau=0.4` val acc `0.98096`, macro P `0.89752`, macro R `0.90933`, macro F1 `0.903112`; no test metrics generated. This is a very small but valid validation-only improvement over `0.902814` within the strict `10`-epoch non-distilled budget.
 - Current eligible non-distilled track best after OneCycle `max_lr=0.00125`:
   - `autoresearch_yoloctm_nodistill_onecycle_lr00125_tau04_e10_20260529_032835`, params `10.525M`, `10` epochs, fixed-`tau=0.4` val macro F1 `0.903112`; no test metrics generated.
-- Current active non-distilled candidate:
+- Aborted non-distilled candidate:
   - `scripts/train_wm811k_yoloctm.py` and the pipeline expose a default-off SAM/ASAM optimizer switch (`train.sam_rho`, `train.sam_adaptive`) for a single-factor no-distillation candidate within the same 10-epoch budget.
   - rationale: SAM targets flatter minima and generalization without teacher logits or inference-time parameter changes (Foret et al., ICLR 2021, `https://arxiv.org/abs/2010.01412`).
   - started `AutoResearch/configs/wm811k_autoresearch_sam.yaml` as `autoresearch_yoloctm_nodistill_sam005_tau04_e10_20260529_103037` on CPU because recent GPU attempts repeatedly BugChecked the host; keep validation-only screening and no test metrics, with keep threshold `0.9031118086245977`.
-  - status at `2026-05-29 10:41 +08:00`: PID `18524` alive and accumulating CPU time, but no epoch line yet; do not duplicate the run while this process is healthy.
-- Next prepared option if SAM does not improve:
+  - result: aborted as `aborted_resource_infeasible` at `2026-05-29 11:47 +08:00` after more than one hour of CPU time before epoch 1, with no checkpoint or metrics. This is an execution/resource decision, not evidence that SAM improves or degrades validation performance.
+- Current active non-distilled candidate:
   - `scripts/train_wm811k_yoloctm.py` and the pipeline now expose a default-off Lion optimizer switch (`train.optimizer: lion`, `lion_beta1`, `lion_beta2`) plus `AutoResearch/configs/wm811k_autoresearch_lion.yaml`.
   - rationale: Lion (Chen et al., NeurIPS 2023, `https://arxiv.org/abs/2302.06675`) is a sign-momentum optimizer reported to improve training efficiency versus Adam-style optimizers; this directly targets the observed 10-epoch under-convergence without teachers, test access, architecture changes, or inference-time parameter changes.
-  - prepared recipe: keep the current no-distillation OneCycle + EMA + fixed `tau=0.4` protocol, switch from AdamW to Lion with paper-recommended smaller LR / larger WD scaling (`lr=0.0003`, `weight_decay=0.001`), and screen only on validation macro F1 against `0.9031118086245977`.
+  - active recipe: keep the current no-distillation OneCycle + EMA + fixed `tau=0.4` protocol, switch from AdamW to Lion with paper-recommended smaller LR / larger WD scaling (`lr=0.0003`, `weight_decay=0.001`), and screen only on validation macro F1 against `0.9031118086245977`.
+  - launched on GPU as `autoresearch_yoloctm_nodistill_lion_lr0003_tau04_e10_20260529_114820` after stopping unrelated GPU PID `9072`; applied `nvidia-smi -pl 400` and `nvidia-smi -lgc 300,1200`. As of `2026-05-29 11:55 +08:00`, PID `28340` was alive with `requested_device=0`, GPU utilization near `99%`, and no epoch line yet.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).

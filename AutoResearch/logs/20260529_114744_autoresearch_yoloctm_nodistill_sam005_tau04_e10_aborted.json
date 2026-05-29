@@ -1,0 +1,14 @@
+﻿{
+    "status":  "aborted_resource_infeasible",
+    "run_dir":  "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_nodistill_sam005_tau04_e10_20260529_103037",
+    "algorithm":  "yoloctm",
+    "epochs":  10,
+    "device":  "cpu",
+    "sam_rho":  0.05,
+    "sam_adaptive":  false,
+    "reason":  "Aborted resource-infeasible CPU SAM screen after \u003e1h before epoch 1; no checkpoint or metrics. User asked why CPU rather than GPU; search is switching to lighter GPU Lion candidate under stability controls.",
+    "checkpoint_present":  false,
+    "best_checkpoint_present":  false,
+    "pipeline_log":  "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_nodistill_sam005_tau04_e10_20260529_103037\\pipeline.log",
+    "timestamp":  "2026-05-29T11:47:44"
+}
