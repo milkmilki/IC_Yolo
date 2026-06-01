@@ -22,6 +22,16 @@ datasets/pku_market_pcb/
 *.onnx
 *.engine
 *.cache
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.zip
+*.7z
+*.tar
+*.tar.gz
 
 # Local agent/ARIS runtime state and scratch files
 .aris/
