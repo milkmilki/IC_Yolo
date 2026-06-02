@@ -12,6 +12,28 @@ WM-811K 晶圆图缺陷分类同时面临空间形态依赖和类别长尾分布
 
 ## 2. 方法
 
+图 1 给出了当前无蒸馏 YoloCTM 的整体网络结构。需要强调的是，EMA、OneCycle 和类先验校准不引入新的推理分支；推理阶段实际执行的是 YOLO 主干、CTM 空间残差适配器和分类头。
+
+```mermaid
+flowchart LR
+    A["输入晶圆图<br/>224 x 224"] --> B["YOLO26m 分类主干<br/>提取二维空间特征 F"]
+    B --> C["空间 token 化<br/>flatten + projection"]
+    C --> D["CTMBlock 递归状态更新<br/>d_model=96, steps=4"]
+    D --> E["CTM 状态 S"]
+    E --> F["Feature Adapter<br/>投影回 YOLO 特征维度"]
+    B --> G["残差融合<br/>F' = F + alpha * Adapter(S)"]
+    F --> G
+    G --> H["YOLO 分类头"]
+    H --> I["类别 logits"]
+    I --> J["固定类先验校准<br/>logits' = logits + tau log(class_count)<br/>tau=0.4"]
+    J --> K["最终预测"]
+
+    L["训练期策略<br/>weighted CE + OneCycle<br/>EMA 权重平均"] -. "只影响训练/权重导出" .-> H
+    M["无蒸馏设置<br/>distill_weight=0<br/>无 teacher log-probs"] -. "不使用教师模型" .-> L
+```
+
+**图 1  无蒸馏 YoloCTM 空间残差适配网络结构。**
+
 ### 2.1 YoloCTM 空间残差适配器
 
 模型首先使用预训练 YOLO 分类网络提取二维空间特征图。随后将特征图展平为空间 token 序列，并输入 CTM 风格的递归状态更新模块。CTM 模块通过多步状态更新建模空间 token 之间的上下文关系。
@@ -88,3 +110,51 @@ onecycle_final_div_factor = 1000
 ## 5. 结论
 
 本文实现并验证了一条无蒸馏 YoloCTM 路线。在固定 10 epoch、无教师模型、无测试集反馈的条件下，最佳验证 macro F1 达到 0.9092。该结果说明，YoloCTM 不必完全依赖教师蒸馏即可获得较强长尾分类表现。后续工作应补充纯 YOLO 与 YoloCTM 的推理速度对比、跨数据集验证，以及更具晶圆结构先验的空间建模机制。
+
+## 6. 后续深度创新候选：晶圆拓扑感知 Token Mixer
+
+当前已经实现一个更偏结构创新的候选方向：`WaferTopologyMixer`。该模块不再只把 YOLO 特征图简单展平成 token，也不只加入极坐标数值，而是显式利用晶圆图的拓扑结构，在 CTM 状态更新前构造三类上下文：
+
+```text
+ring context   : 同一半径环带内的平均 token 表征
+sector context : 同一角向扇区内的平均 token 表征
+global context : 全晶圆平均 token 表征
+```
+
+然后将当前 token、环带上下文、扇区上下文、全局上下文以及可学习的环带/扇区嵌入拼接，经轻量 MLP 产生拓扑残差：
+
+```text
+T' = T + beta * Gate(T, G) * MLP([T, R, S, U, G])
+```
+
+其中 `T` 是原始空间 token，`R` 是 ring context，`S` 是 sector context，`U` 是 global context，`G` 是 ring/sector geometry embedding。该模块的最后一层采用零初始化，使模型初始行为接近当前 best baseline，训练时再逐步学习是否使用拓扑上下文。
+
+这个候选的论文动机更强：晶圆缺陷类别天然具有环带性、方位性和全局覆盖差异。例如，`Center` 与 `Edge-Loc` 依赖半径位置，`Scratch` 依赖跨区域细长轨迹，`Near-full` 依赖全局覆盖程度。相比通用 token mixer，晶圆拓扑感知 mixer 直接把这些结构先验嵌入到 token 交互中，更容易形成期刊级方法叙事。
+
+当前候选配置为：
+
+```text
+AutoResearch/configs/wm811k_autoresearch_wafer_topology.yaml
+```
+
+关键设置：
+
+```text
+token_mixer: wafer_topology
+topology_ring_bins: 4
+topology_sector_bins: 8
+topology_hidden_mult: 1.5
+```
+
+该候选保持当前无蒸馏 best 的训练协议不变：
+
+```text
+AdamW + OneCycle max_lr=0.00125
+onecycle_final_div_factor=1000
+EMA decay=0.999
+tau=0.4
+10 epoch
+test.enabled=false
+```
+
+因此它是一个单因素结构实验。若验证 macro F1 超过 `0.909208`，可以将其作为“晶圆拓扑感知空间残差适配”的主创新点；若只在某些类别上改善，则可进一步做 ring/sector 消融和类别级分析。

@@ -5,6 +5,7 @@ import copy
 import json
 import math
 import random
+import time
 from pathlib import Path
 
 import numpy as np
@@ -211,6 +212,145 @@ class SharedCrossScanMixer(nn.Module):
         return tokens + self.scale * self.proj(delta)
 
 
+class WaferTopologyMixer(nn.Module):
+    """Ring/sector-aware token mixing for wafer-map spatial topology."""
+
+    def __init__(
+        self,
+        d_model: int,
+        ring_bins: int = 4,
+        sector_bins: int = 8,
+        hidden_mult: float = 1.5,
+        scale_init: float = 0.05,
+    ) -> None:
+        super().__init__()
+        self.ring_bins = max(1, int(ring_bins))
+        self.sector_bins = max(1, int(sector_bins))
+        hidden_dim = max(d_model, int(round(float(hidden_mult) * d_model)))
+        self.ring_embed = nn.Embedding(self.ring_bins, d_model)
+        self.sector_embed = nn.Embedding(self.sector_bins, d_model)
+        self.context_proj = nn.Sequential(
+            nn.LayerNorm(d_model * 5),
+            nn.Linear(d_model * 5, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, d_model),
+        )
+        self.context_gate = nn.Sequential(
+            nn.LayerNorm(d_model * 2),
+            nn.Linear(d_model * 2, d_model),
+            nn.Sigmoid(),
+        )
+        self.scale = nn.Parameter(torch.tensor(float(scale_init)))
+        nn.init.zeros_(self.context_proj[-1].weight)
+        nn.init.zeros_(self.context_proj[-1].bias)
+
+    @staticmethod
+    def _index_by_geometry(height: int, width: int, bins: int, mode: str, device: torch.device) -> torch.Tensor:
+        yy, xx = torch.meshgrid(
+            torch.linspace(-1.0, 1.0, steps=height, device=device),
+            torch.linspace(-1.0, 1.0, steps=width, device=device),
+            indexing="ij",
+        )
+        if mode == "ring":
+            radius = torch.sqrt(xx.square() + yy.square())
+            radius = radius / radius.max().clamp_min(1e-6)
+            index = torch.floor(radius * float(bins)).long()
+        elif mode == "sector":
+            angle = torch.atan2(yy, xx) + torch.pi
+            index = torch.floor(angle / (2.0 * torch.pi) * float(bins)).long()
+        else:
+            raise ValueError(f"Unknown topology index mode: {mode}")
+        return index.clamp_(0, bins - 1).reshape(-1)
+
+    @staticmethod
+    def _pooled_context(tokens: torch.Tensor, index: torch.Tensor, bins: int) -> torch.Tensor:
+        batch, length, channels = tokens.shape
+        context = torch.zeros(batch, bins, channels, device=tokens.device, dtype=tokens.dtype)
+        expanded = index.view(1, length, 1).expand(batch, length, channels)
+        context.scatter_add_(1, expanded, tokens)
+        counts = torch.bincount(index, minlength=bins).to(device=tokens.device, dtype=tokens.dtype)
+        context = context / counts.clamp_min(1.0).view(1, bins, 1)
+        gather_index = index.view(1, length, 1).expand(batch, length, channels)
+        return context.gather(1, gather_index)
+
+    def forward(self, tokens: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        batch, length, channels = tokens.shape
+        if length != height * width:
+            raise ValueError(f"Token length {length} does not match spatial shape {height}x{width}")
+        ring_index = self._index_by_geometry(height, width, self.ring_bins, "ring", tokens.device)
+        sector_index = self._index_by_geometry(height, width, self.sector_bins, "sector", tokens.device)
+        ring_context = self._pooled_context(tokens, ring_index, self.ring_bins)
+        sector_context = self._pooled_context(tokens, sector_index, self.sector_bins)
+        global_context = tokens.mean(dim=1, keepdim=True).expand(batch, length, channels)
+        geometry = self.ring_embed(ring_index) + self.sector_embed(sector_index)
+        geometry = geometry.to(dtype=tokens.dtype).unsqueeze(0).expand(batch, length, channels)
+        delta = self.context_proj(torch.cat([tokens, ring_context, sector_context, global_context, geometry], dim=-1))
+        gate = self.context_gate(torch.cat([tokens, geometry], dim=-1))
+        return tokens + self.scale * gate * delta
+
+
+class TopologyConditionedCTMBlock(nn.Module):
+    """CTM state update conditioned on wafer ring/sector topology at every thought step."""
+
+    def __init__(
+        self,
+        d_model: int,
+        dropout: float = 0.1,
+        ring_bins: int = 4,
+        sector_bins: int = 8,
+        hidden_mult: float = 1.5,
+        scale_init: float = 0.02,
+    ) -> None:
+        super().__init__()
+        self.base = CTMBlock(d_model=d_model, dropout=dropout)
+        self.ring_bins = max(1, int(ring_bins))
+        self.sector_bins = max(1, int(sector_bins))
+        hidden_dim = max(d_model, int(round(float(hidden_mult) * d_model)))
+        self.ring_embed = nn.Embedding(self.ring_bins, d_model)
+        self.sector_embed = nn.Embedding(self.sector_bins, d_model)
+        self.context_proj = nn.Sequential(
+            nn.LayerNorm(d_model * 6),
+            nn.Linear(d_model * 6, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, d_model),
+        )
+        self.context_gate = nn.Sequential(
+            nn.LayerNorm(d_model * 3),
+            nn.Linear(d_model * 3, d_model),
+            nn.Sigmoid(),
+        )
+        self.scale = nn.Parameter(torch.tensor(float(scale_init)))
+        nn.init.zeros_(self.context_proj[-1].weight)
+        nn.init.zeros_(self.context_proj[-1].bias)
+
+    def forward(
+        self,
+        state: torch.Tensor,
+        x: torch.Tensor,
+        height: int | None = None,
+        width: int | None = None,
+    ) -> torch.Tensor:
+        if height is None or width is None:
+            return self.base(state, x)
+        batch, length, channels = x.shape
+        if length != int(height) * int(width):
+            raise ValueError(f"Token length {length} does not match spatial shape {height}x{width}")
+        ring_index = WaferTopologyMixer._index_by_geometry(height, width, self.ring_bins, "ring", x.device)
+        sector_index = WaferTopologyMixer._index_by_geometry(height, width, self.sector_bins, "sector", x.device)
+        dynamic_tokens = state + x
+        ring_context = WaferTopologyMixer._pooled_context(dynamic_tokens, ring_index, self.ring_bins)
+        sector_context = WaferTopologyMixer._pooled_context(dynamic_tokens, sector_index, self.sector_bins)
+        global_context = dynamic_tokens.mean(dim=1, keepdim=True).expand(batch, length, channels)
+        geometry = self.ring_embed(ring_index) + self.sector_embed(sector_index)
+        geometry = geometry.to(dtype=x.dtype).unsqueeze(0).expand(batch, length, channels)
+        topology_delta = self.context_proj(
+            torch.cat([state, x, ring_context, sector_context, global_context, geometry], dim=-1)
+        )
+        topology_gate = self.context_gate(torch.cat([state, x, geometry], dim=-1))
+        conditioned_x = x + self.scale * topology_gate * topology_delta
+        return self.base(state, conditioned_x)
+
+
 class BalancedSoftmaxLoss(nn.Module):
     def __init__(self, class_counts: torch.Tensor) -> None:
         super().__init__()
@@ -260,6 +400,9 @@ class YoloCTM(nn.Module):
         spatial_encoding_scale_init: float = 0.05,
         token_mixer: str = "none",
         scan_scale_init: float = 0.05,
+        topology_ring_bins: int = 4,
+        topology_sector_bins: int = 8,
+        topology_hidden_mult: float = 1.5,
         ctm_readout: str = "mean",
         logit_bias: bool = False,
         logit_bias_init: torch.Tensor | None = None,
@@ -278,14 +421,36 @@ class YoloCTM(nn.Module):
             self.spatial_proj = None
             self.spatial_scale = None
         self.token_mixer_type = str(token_mixer).lower()
-        if self.token_mixer_type not in {"none", "cross_scan"}:
-            raise ValueError("token_mixer must be one of: none, cross_scan")
+        if self.token_mixer_type not in {"none", "cross_scan", "wafer_topology", "topology_ctm"}:
+            raise ValueError("token_mixer must be one of: none, cross_scan, wafer_topology, topology_ctm")
         self.cross_scan_mixer = (
             SharedCrossScanMixer(d_model=d_model, scale_init=scan_scale_init)
             if self.token_mixer_type == "cross_scan"
             else None
         )
-        self.ctm_block = CTMBlock(d_model=d_model, dropout=dropout)
+        self.topology_mixer = (
+            WaferTopologyMixer(
+                d_model=d_model,
+                ring_bins=int(topology_ring_bins),
+                sector_bins=int(topology_sector_bins),
+                hidden_mult=float(topology_hidden_mult),
+                scale_init=scan_scale_init,
+            )
+            if self.token_mixer_type == "wafer_topology"
+            else None
+        )
+        self.ctm_block = (
+            TopologyConditionedCTMBlock(
+                d_model=d_model,
+                dropout=dropout,
+                ring_bins=int(topology_ring_bins),
+                sector_bins=int(topology_sector_bins),
+                hidden_mult=float(topology_hidden_mult),
+                scale_init=scan_scale_init,
+            )
+            if self.token_mixer_type == "topology_ctm"
+            else CTMBlock(d_model=d_model, dropout=dropout)
+        )
         self.steps = steps
         self.norm = nn.LayerNorm(d_model)
         self.ctm_readout = str(ctm_readout).lower()
@@ -393,9 +558,16 @@ class YoloCTM(nn.Module):
             if self.cross_scan_mixer is None:
                 raise RuntimeError("Cross-scan mixer parameters are not initialized")
             inputs = self.cross_scan_mixer(inputs, feats.shape[-2], feats.shape[-1])
+        elif self.token_mixer_type == "wafer_topology" and feats.ndim == 4:
+            if self.topology_mixer is None:
+                raise RuntimeError("Wafer topology mixer parameters are not initialized")
+            inputs = self.topology_mixer(inputs, feats.shape[-2], feats.shape[-1])
         state = torch.zeros_like(inputs)
         for _ in range(self.steps):
-            state = self.ctm_block(state, inputs)
+            if self.token_mixer_type == "topology_ctm" and feats.ndim == 4:
+                state = self.ctm_block(state, inputs, feats.shape[-2], feats.shape[-1])
+            else:
+                state = self.ctm_block(state, inputs)
 
         state = self.norm(state)
         pooled = self._pool_ctm_state(state)
@@ -660,8 +832,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--freeze-yolo-anchor", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--spatial-encoding", choices=["none", "polar"], default="none")
     parser.add_argument("--spatial-encoding-scale-init", type=float, default=0.05)
-    parser.add_argument("--token-mixer", choices=["none", "cross_scan"], default="none")
+    parser.add_argument("--token-mixer", choices=["none", "cross_scan", "wafer_topology", "topology_ctm"], default="none")
     parser.add_argument("--scan-scale-init", type=float, default=0.05)
+    parser.add_argument("--topology-ring-bins", type=int, default=4)
+    parser.add_argument("--topology-sector-bins", type=int, default=8)
+    parser.add_argument("--topology-hidden-mult", type=float, default=1.5)
     parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
     parser.add_argument("--logit-bias", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logit-bias-init", choices=["zero", "prior"], default="zero")
@@ -698,6 +873,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--none-sampling-ratio", type=float, default=0.5)
     parser.add_argument("--train-sampling-start-epoch", type=int, default=1)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument(
+        "--progress-batches",
+        type=int,
+        default=0,
+        help="Print and flush a training heartbeat every N batches; 0 disables batch-level progress",
+    )
     parser.add_argument("--device", default="0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--project", default="runs/classify")
     parser.add_argument("--name", default="wm811k_yoloctm")
@@ -1008,9 +1189,12 @@ def train_one_epoch(
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
     sam_rho: float = 0.0,
     sam_adaptive: bool = False,
+    progress_batches: int = 0,
+    epoch: int | None = None,
 ) -> tuple[float, float]:
     model.train()
     grad_accum_steps = max(1, int(grad_accum_steps))
+    progress_batches = max(0, int(progress_batches))
     total_loss = 0.0
     correct = 0
     total = 0
@@ -1018,6 +1202,7 @@ def train_one_epoch(
     num_batches = len(loader)
     use_sam = float(sam_rho) > 0
     group_buffer: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]] = []
+    started_at = time.perf_counter()
 
     def forward_loss(
         images: torch.Tensor,
@@ -1061,6 +1246,17 @@ def train_one_epoch(
             total_loss += loss.item() * labels.size(0)
             correct += (logits.argmax(dim=1) == labels).sum().item()
             total += labels.size(0)
+            if progress_batches and (
+                (batch_index + 1) % progress_batches == 0 or batch_index + 1 == num_batches
+            ):
+                elapsed = time.perf_counter() - started_at
+                epoch_text = f"Epoch {int(epoch):03d}" if epoch is not None else "Epoch"
+                print(
+                    f"{epoch_text} batch {batch_index + 1:04d}/{num_batches}: "
+                    f"seen={total} train_loss={total_loss / max(total, 1):.4f} "
+                    f"train_acc={correct / max(total, 1):.4f} elapsed={elapsed:.1f}s",
+                    flush=True,
+                )
             continue
 
         group_buffer.append((images, labels, indices))
@@ -1089,6 +1285,17 @@ def train_one_epoch(
             update_ema_model(ema_model, model, float(ema_decay))
         optimizer.zero_grad(set_to_none=True)
         group_buffer.clear()
+        if progress_batches and (
+            (batch_index + 1) % progress_batches == 0 or batch_index + 1 == num_batches
+        ):
+            elapsed = time.perf_counter() - started_at
+            epoch_text = f"Epoch {int(epoch):03d}" if epoch is not None else "Epoch"
+            print(
+                f"{epoch_text} batch {batch_index + 1:04d}/{num_batches}: "
+                f"seen={total} train_loss={total_loss / max(total, 1):.4f} "
+                f"train_acc={correct / max(total, 1):.4f} elapsed={elapsed:.1f}s",
+                flush=True,
+            )
     return total_loss / max(total, 1), correct / max(total, 1)
 
 
@@ -1232,6 +1439,9 @@ def main() -> int:
         spatial_encoding_scale_init=float(args.spatial_encoding_scale_init),
         token_mixer=str(args.token_mixer),
         scan_scale_init=float(args.scan_scale_init),
+        topology_ring_bins=int(args.topology_ring_bins),
+        topology_sector_bins=int(args.topology_sector_bins),
+        topology_hidden_mult=float(args.topology_hidden_mult),
         ctm_readout=str(args.ctm_readout),
         logit_bias=bool(args.logit_bias),
         logit_bias_init=logit_bias_init,
@@ -1401,6 +1611,7 @@ def main() -> int:
         return payload
 
     for epoch in range(start_epoch, args.epochs + 1):
+        print(f"[train] starting epoch {epoch}/{int(args.epochs)}", flush=True)
         train_criterion = (
             ldam_criterion
             if ldam_criterion is not None and epoch >= int(args.ldam_start_epoch)
@@ -1439,6 +1650,8 @@ def main() -> int:
             scheduler=scheduler,
             sam_rho=float(args.sam_rho),
             sam_adaptive=bool(args.sam_adaptive),
+            progress_batches=int(args.progress_batches),
+            epoch=epoch,
         )
         selection_model = ema_model if ema_model is not None else model
         val_loss, val_acc, val_macro_f1 = evaluate(
@@ -1458,7 +1671,8 @@ def main() -> int:
         })
         print(
             f"Epoch {epoch:03d}: train_loss={train_loss:.4f} train_acc={train_acc:.4f} "
-            f"val_loss={val_loss:.4f} val_acc={val_acc:.4f} val_macro_f1={val_macro_f1:.4f}"
+            f"val_loss={val_loss:.4f} val_acc={val_acc:.4f} val_macro_f1={val_macro_f1:.4f}",
+            flush=True,
         )
         if val_macro_f1 > best_val_f1:
             best_val_f1 = val_macro_f1
