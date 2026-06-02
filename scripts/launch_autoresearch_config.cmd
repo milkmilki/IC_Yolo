@@ -3,6 +3,11 @@ setlocal
 
 set "PROJECT_ROOT=E:\Cjn\PCB_Yolo"
 set "PYTHON_EXE=D:\anaconda3\envs\pcb_yolo\python.exe"
+set "FOREGROUND=0"
+if /I "%~1"=="/foreground" (
+    set "FOREGROUND=1"
+    shift
+)
 set "CONFIG=%~1"
 if "%CONFIG%"=="" set "CONFIG=AutoResearch\configs\wm811k_autoresearch_topology_ctm.yaml"
 
@@ -29,7 +34,11 @@ set "STDOUT_LOG=%PROJECT_ROOT%\AutoResearch\launch_logs\autoresearch_cmd_%STAMP%
 set "STDERR_LOG=%PROJECT_ROOT%\AutoResearch\launch_logs\autoresearch_cmd_%STAMP%.err.log"
 
 pushd "%PROJECT_ROOT%"
-start "wm811k-autoresearch" /B "%PYTHON_EXE%" "%PROJECT_ROOT%\scripts\run_wm811k_pipeline.py" --config "%CONFIG%" > "%STDOUT_LOG%" 2> "%STDERR_LOG%"
+if "%FOREGROUND%"=="1" (
+    "%PYTHON_EXE%" "%PROJECT_ROOT%\scripts\run_wm811k_pipeline.py" --config "%CONFIG%"
+) else (
+    start "wm811k-autoresearch" /B "%PYTHON_EXE%" "%PROJECT_ROOT%\scripts\run_wm811k_pipeline.py" --config "%CONFIG%" > "%STDOUT_LOG%" 2> "%STDERR_LOG%"
+)
 popd
 
 echo stdout=%STDOUT_LOG%

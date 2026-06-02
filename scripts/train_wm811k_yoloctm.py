@@ -351,6 +351,46 @@ class TopologyConditionedCTMBlock(nn.Module):
         return self.base(state, conditioned_x)
 
 
+class WaferTopologyAdapterGate(nn.Module):
+    """Wafer-topology spatial gate for the CTM-to-YOLO residual adapter."""
+
+    def __init__(
+        self,
+        d_model: int,
+        ring_bins: int = 4,
+        sector_bins: int = 8,
+        hidden_mult: float = 1.0,
+    ) -> None:
+        super().__init__()
+        self.ring_bins = max(1, int(ring_bins))
+        self.sector_bins = max(1, int(sector_bins))
+        hidden_dim = max(d_model, int(round(float(hidden_mult) * d_model)))
+        self.ring_embed = nn.Embedding(self.ring_bins, d_model)
+        self.sector_embed = nn.Embedding(self.sector_bins, d_model)
+        self.gate = nn.Sequential(
+            nn.LayerNorm(d_model * 5),
+            nn.Linear(d_model * 5, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, 1),
+        )
+        nn.init.zeros_(self.gate[-1].weight)
+        nn.init.zeros_(self.gate[-1].bias)
+
+    def forward(self, state: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        batch, length, channels = state.shape
+        if length != int(height) * int(width):
+            raise ValueError(f"Token length {length} does not match spatial shape {height}x{width}")
+        ring_index = WaferTopologyMixer._index_by_geometry(height, width, self.ring_bins, "ring", state.device)
+        sector_index = WaferTopologyMixer._index_by_geometry(height, width, self.sector_bins, "sector", state.device)
+        ring_context = WaferTopologyMixer._pooled_context(state, ring_index, self.ring_bins)
+        sector_context = WaferTopologyMixer._pooled_context(state, sector_index, self.sector_bins)
+        global_context = state.mean(dim=1, keepdim=True).expand(batch, length, channels)
+        geometry = self.ring_embed(ring_index) + self.sector_embed(sector_index)
+        geometry = geometry.to(dtype=state.dtype).unsqueeze(0).expand(batch, length, channels)
+        gate = torch.sigmoid(self.gate(torch.cat([state, ring_context, sector_context, global_context, geometry], dim=-1)))
+        return gate.transpose(1, 2).reshape(batch, 1, height, width)
+
+
 class BalancedSoftmaxLoss(nn.Module):
     def __init__(self, class_counts: torch.Tensor) -> None:
         super().__init__()
@@ -487,10 +527,10 @@ class YoloCTM(nn.Module):
             self.expert_ctm_logits = None
         self.feature_adapter_enabled = bool(feature_adapter)
         self.feature_fusion = str(feature_fusion).lower()
-        if self.feature_fusion not in {"residual", "gated", "token"}:
-            raise ValueError("feature_fusion must be one of: residual, gated, token")
-        if self.feature_fusion in {"gated", "token"} and not self.feature_adapter_enabled:
-            raise ValueError("feature_fusion='gated' or 'token' requires feature_adapter=True")
+        if self.feature_fusion not in {"residual", "gated", "token", "topology_gate"}:
+            raise ValueError("feature_fusion must be one of: residual, gated, token, topology_gate")
+        if self.feature_fusion in {"gated", "token", "topology_gate"} and not self.feature_adapter_enabled:
+            raise ValueError("feature_fusion='gated', 'token', or 'topology_gate' requires feature_adapter=True")
         self.gate_rank = max(1, int(gate_rank))
         self.token_gate_rank = max(1, int(token_gate_rank))
         self.adapter_rank = int(adapter_rank)
@@ -510,6 +550,7 @@ class YoloCTM(nn.Module):
             self.feature_adapter = None
         self.feature_gate = None
         self.token_gate = None
+        self.topology_adapter_gate = None
         if self.feature_adapter_enabled:
             self.feature_adapter_scale = nn.Parameter(torch.tensor(0.05))
             if self.feature_fusion == "gated":
@@ -528,6 +569,13 @@ class YoloCTM(nn.Module):
                 )
                 nn.init.zeros_(self.token_gate[-1].weight)
                 nn.init.zeros_(self.token_gate[-1].bias)
+            elif self.feature_fusion == "topology_gate":
+                self.topology_adapter_gate = WaferTopologyAdapterGate(
+                    d_model=d_model,
+                    ring_bins=int(topology_ring_bins),
+                    sector_bins=int(topology_sector_bins),
+                    hidden_mult=float(topology_hidden_mult),
+                )
 
     @staticmethod
     def _as_logits(output: torch.Tensor | tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
@@ -643,6 +691,9 @@ class YoloCTM(nn.Module):
                 return feats + self.feature_adapter_scale * gate * residual
             if self.feature_fusion == "token" and self.token_gate is not None:
                 gate = self._token_gate(state, height, width)
+                return feats + self.feature_adapter_scale * gate * residual
+            if self.feature_fusion == "topology_gate" and self.topology_adapter_gate is not None:
+                gate = self.topology_adapter_gate(state, height, width)
                 return feats + self.feature_adapter_scale * gate * residual
             return feats + self.feature_adapter_scale * residual
         if feats.ndim == 2:
@@ -822,7 +873,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--class-weight-power", type=float, default=0.5)
     parser.add_argument("--adapter-rank", type=int, default=0)
     parser.add_argument("--feature-adapter", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--feature-fusion", choices=["residual", "gated", "token"], default="residual")
+    parser.add_argument("--feature-fusion", choices=["residual", "gated", "token", "topology_gate"], default="residual")
     parser.add_argument("--gate-rank", type=int, default=16)
     parser.add_argument("--token-gate-rank", type=int, default=16)
     parser.add_argument("--logprob-fusion", action=argparse.BooleanOptionalAction, default=False)

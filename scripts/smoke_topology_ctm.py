@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from train_wm811k_yoloctm import TopologyConditionedCTMBlock
+from train_wm811k_yoloctm import TopologyConditionedCTMBlock, WaferTopologyAdapterGate
 
 
 def main() -> int:
@@ -27,7 +27,14 @@ def main() -> int:
         raise AssertionError("spatial output contains non-finite values")
     if not torch.isfinite(fallback).all():
         raise AssertionError("fallback output contains non-finite values")
-    print("TopologyConditionedCTMBlock smoke ok")
+
+    adapter_gate = WaferTopologyAdapterGate(d_model=96, ring_bins=4, sector_bins=8, hidden_mult=1.0)
+    gate = adapter_gate(tokens, 7, 7)
+    if gate.shape != (2, 1, 7, 7):
+        raise AssertionError(f"adapter gate shape mismatch: {gate.shape}")
+    if not torch.isfinite(gate).all():
+        raise AssertionError("adapter gate contains non-finite values")
+    print("Topology CTM smoke ok")
     return 0
 
 

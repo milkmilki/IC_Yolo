@@ -111,3 +111,56 @@ selection: val only
 ```
 
 如果 `topology_ctm` 仍低于 baseline，但显著高于 `wafer_topology`，它仍然有论文价值：说明拓扑先验的位置会影响 CTM-YOLO 耦合质量。若超过 baseline，则作为主方法继续做 bins/scale/class-level ablation。
+
+## 7. 2026-06-02 `topology_ctm` 实验结果
+
+完整 10 epoch、无蒸馏、val-only 实验已经完成：
+
+```text
+run: autoresearch_yoloctm_nodistill_topology_ctm_tau04_e10_20260602_164014
+status: discard
+params: 10.637M
+val acc: 0.9767961763798951
+val macro P: 0.8685263182037413
+val macro R: 0.9037496446505197
+val macro F1: 0.8844151374079662
+threshold: 0.9092079916730437
+```
+
+与 `wafer_topology` 的 0.890201 相比，`topology_ctm` 进一步下降到 0.884415，说明把 ring/sector/global 先验注入每一步 CTM state update 仍然太强。类别报告显示该模型保持了较高 recall，但 precision 被拉低，尤其是 `Loc`、`Scratch`、`Edge-Loc` 这类依赖局部边界和细长形态的类别。这支持一个新的结构判断：
+
+```text
+拓扑先验不应直接改写 token 或 CTM state dynamics；
+更合适的位置是控制 CTM residual adapter 的门控强度。
+```
+
+下一轮建议从 **Topology-Gated Adapter** 出发：保持 CTM state update 为当前强基线的 vanilla CTM，只在 `_apply_feature_adapter` 阶段用 ring/sector/global context 生成空间 gate，决定 CTM residual correction 在哪些环带/扇区增强或抑制。这样能保留 YOLO backbone 的局部判别特征，同时把晶圆拓扑作为残差修正的选择器，而不是作为主表征的扰动项。论文叙事也更稳：YOLO 负责局部缺陷视觉，CTM 负责多步形态摘要，拓扑模块只负责 wafer-aware residual routing。
+
+## 8. 下一候选：Topology-Gated Adapter
+
+已新增候选配置：
+
+```text
+AutoResearch/configs/wm811k_autoresearch_topology_adapter_gate.yaml
+```
+
+核心设置：
+
+```text
+token_mixer: none
+feature_fusion: topology_gate
+topology_ring_bins: 4
+topology_sector_bins: 8
+topology_hidden_mult: 1.0
+```
+
+结构假设：
+
+```text
+S = CTM(T)                         # 不改写 CTM recurrent dynamics
+R = Adapter(S)                     # CTM residual correction
+G = TopologyGate(S, ring, sector)  # wafer-aware residual routing
+F' = F + alpha * G * R             # 只控制 residual 注入位置
+```
+
+该候选比 `wafer_topology` 和 `topology_ctm` 更保守：拓扑信息不再直接修改 token 或 state，只作为 residual adapter 的空间选择器。若它仍低于 baseline，说明当前拓扑离散先验本身与 YOLO26m 的高层特征粒度不匹配，下一步应转向多尺度特征 taps 或 class-conditional adapter routing；若它接近或超过 0.9092，则可以作为期刊主结构继续做 gate 可视化、class-level ablation 和 topology bins 消融。
