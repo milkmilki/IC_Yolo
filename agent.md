@@ -282,6 +282,9 @@ Keep it short and operational.
 - Next adaptive-depth candidate selected after the post-hoc diagnostic:
   - add `step_conditioning: input_add`, a tiny learned per-step embedding added to CTM input tokens before each recurrent update, using `AutoResearch/configs/wm811k_autoresearch_stepcond_adaptive.yaml`.
   - rationale: post-hoc extra steps did not change predictions because the shared transition appears to reach a decision-invariant state by step 4. Step conditioning gives later thoughts a distinct trainable role while adding only `steps*d_model` parameters and preserving the no-distillation, 10-epoch, val-only protocol.
+  - result: keep `autoresearch_yoloctm_nodistill_stepcond_adaptive_tau04_e10_20260604_175603`, params `10.526M`, fixed-`tau=0.4` val acc `0.98169`, macro P `0.90924`, macro R `0.91292`, macro F1 `0.910746`; no test metrics generated. This is a new eligible no-distillation track best above `0.909208`.
+  - best checkpoint was epoch `10`, with `val_adaptive_avg_steps=4.151` and `val_adaptive_max_step_fraction=0.0754`. Post-hoc thresholds `0.95` and `1.00` on the same checkpoint kept macro F1 exactly `0.910746`, so the gain comes from training with step-conditioned 6-step dynamics rather than from the raw confidence halting threshold.
+  - current future-screening threshold for the eligible no-distillation track is now validation macro F1 `0.910745916167499`.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).

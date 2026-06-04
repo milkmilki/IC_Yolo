@@ -321,3 +321,46 @@ step_conditioning: input_add
 ```
 
 该改动只增加 `steps * d_model = 576` 个参数，不引入蒸馏、不读 test、不改数据 split，并保持最终 10 epoch 约束。它要检验的问题是：如果第 5/6 步拥有不同的条件输入，CTM 是否能把“多思考”变成真实的决策修正，而不是无效重复。
+
+### 结果：keep
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_adaptive_tau04_e10_20260604_175603
+status: keep
+params: 10.526M
+epochs: 10
+val acc: 0.981691
+val macro P/R/F1: 0.909237 / 0.912917 / 0.910746
+previous no-distill threshold: 0.9092079916730437
+test: disabled
+```
+
+最佳 checkpoint 为 epoch 10：
+
+```text
+val_adaptive_avg_steps: 4.151
+val_adaptive_max_step_fraction: 0.0754
+```
+
+逐类相对当前 no-distill incumbent：
+
+```text
+Donut F1:    0.9102 -> 0.9133  (+0.0031)
+Edge-Ring:   0.9832 -> 0.9863  (+0.0031)
+Random F1:   0.9020 -> 0.9049  (+0.0030)
+Scratch F1:  0.8264 -> 0.8451  (+0.0186)
+Near-full:   0.9130 -> 0.9130  (+0.0000)
+Center F1:   0.9475 -> 0.9469  (-0.0006)
+Loc F1:      0.8317 -> 0.8266  (-0.0051)
+Edge-Loc:    0.8769 -> 0.8687  (-0.0081)
+```
+
+额外诊断：
+
+```text
+threshold 0.90: avg_steps 4.151, max_step_fraction 0.0754, macro F1 0.910745916167499
+threshold 0.95: avg_steps 4.208, max_step_fraction 0.1041, macro F1 0.910745916167499
+threshold 1.00: avg_steps 5.982, max_step_fraction 0.9912, macro F1 0.910745916167499
+```
+
+解释：step-conditioned transition 确实带来新的 validation best，但 post-hoc 阈值诊断显示性能提升不是来自 raw confidence halting，而是来自训练阶段的 step-conditioned 6-step dynamics。也就是说，“第几步”的可学习条件信息让 CTM 训练出更好的状态轨迹；但当前分类边界在评估时仍对第 4/6 步选择不敏感。下一步若继续 adaptive-depth，应转向 deep supervision across steps 或 learned halting，而不是继续扫 confidence threshold。
