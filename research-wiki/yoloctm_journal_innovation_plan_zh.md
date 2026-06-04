@@ -238,3 +238,37 @@ token_mixer: none
 ```
 
 这个方向比静态 topology/classwise routing 更像 CTM 的优势：模型可以按样本难度分配思考深度。若该候选提升 macro F1，则后续可以进一步记录每类平均使用步数、低置信样本分布、步数-准确率曲线；若不提升，则应尝试保持训练 `steps=4`、只在推理时额外走到 6 步的 post-hoc adaptive evaluation，以区分“训练更多步导致过拟合”与“动态推理策略本身无效”。
+
+### 结果：discard
+
+```text
+run: autoresearch_yoloctm_nodistill_adaptive_steps6_min4_tau04_e10_20260604_164729
+status: discard
+params: 10.525M
+epochs: 10
+val acc: 0.981190
+val macro P/R/F1: 0.906901 / 0.899993 / 0.903034
+threshold: 0.9092079916730437
+test: disabled
+```
+
+最佳 checkpoint 出现在 epoch 8：
+
+```text
+epoch 8 val_macro_f1: 0.903034
+val_adaptive_avg_steps: 4.183
+val_adaptive_max_step_fraction: 0.0917
+```
+
+逐类对比当前 no-distill incumbent `autoresearch_yoloctm_nodistill_onecycle_lr00125_finaldiv1000_tau04_e10_20260529_125012`：
+
+```text
+Scratch F1: 0.8264 -> 0.8596  (+0.0331)
+Random F1:  0.9020 -> 0.9008  (-0.0012)
+Loc F1:     0.8317 -> 0.8274  (-0.0043)
+Edge-Loc:   0.8769 -> 0.8684  (-0.0084)
+Donut F1:   0.9102 -> 0.8862  (-0.0240)
+Near-full:  0.9130 -> 0.8636  (-0.0494)
+```
+
+解释：`max_steps=6` 训练没有带来整体收益，且验证时大多数样本在 4 步附近早停。它证明了“动态深度”是可实现和可观测的，但 raw confidence-threshold halting 主要改善 `Scratch`，同时损失小样本类与局部缺陷类的平衡。下一步不应扫 test 阈值；更合理的是保留当前最佳 `steps=4` checkpoint，只做 post-hoc low-confidence extra steps 到 6，或引入带预算正则的 learned halting head。
