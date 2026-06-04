@@ -447,6 +447,7 @@ class YoloCTM(nn.Module):
         adaptive_steps: bool = False,
         adaptive_min_steps: int = 2,
         adaptive_confidence_threshold: float = 0.90,
+        step_conditioning: str = "none",
         logit_bias: bool = False,
         logit_bias_init: torch.Tensor | None = None,
     ) -> None:
@@ -503,6 +504,14 @@ class YoloCTM(nn.Module):
         if not 0.0 < self.adaptive_confidence_threshold <= 1.0:
             raise ValueError("adaptive_confidence_threshold must be in (0, 1]")
         self.last_adaptive_steps_used: torch.Tensor | None = None
+        self.step_conditioning = str(step_conditioning).lower()
+        if self.step_conditioning not in {"none", "input_add"}:
+            raise ValueError("step_conditioning must be one of: none, input_add")
+        self.step_embedding = (
+            nn.Parameter(torch.zeros(max(int(self.steps), 1), d_model))
+            if self.step_conditioning == "input_add"
+            else None
+        )
         self.norm = nn.LayerNorm(d_model)
         self.ctm_readout = str(ctm_readout).lower()
         if self.ctm_readout not in {"mean", "attention"}:
@@ -638,7 +647,18 @@ class YoloCTM(nn.Module):
             outputs.append(pooled)
         return outputs[0] if len(outputs) == 1 else tuple(outputs)
 
-    def _advance_ctm_state(self, state: torch.Tensor, inputs: torch.Tensor, feats: torch.Tensor) -> torch.Tensor:
+    def _advance_ctm_state(
+        self,
+        state: torch.Tensor,
+        inputs: torch.Tensor,
+        feats: torch.Tensor,
+        step_index: int | None = None,
+    ) -> torch.Tensor:
+        if self.step_embedding is not None:
+            if step_index is None:
+                raise RuntimeError("step_index is required when step conditioning is enabled")
+            embedding_index = min(max(int(step_index) - 1, 0), self.step_embedding.shape[0] - 1)
+            inputs = inputs + self.step_embedding[embedding_index].view(1, 1, -1)
         if self.token_mixer_type == "topology_ctm" and feats.ndim == 4:
             return self.ctm_block(state, inputs, feats.shape[-2], feats.shape[-1])
         return self.ctm_block(state, inputs)
@@ -647,8 +667,8 @@ class YoloCTM(nn.Module):
         self.last_adaptive_steps_used = None
         state = torch.zeros_like(inputs)
         if not self.adaptive_steps_enabled or self.training or int(self.steps) <= self.adaptive_min_steps:
-            for _ in range(self.steps):
-                state = self._advance_ctm_state(state, inputs, feats)
+            for step in range(1, int(self.steps) + 1):
+                state = self._advance_ctm_state(state, inputs, feats, step_index=step)
             return self.norm(state)
 
         active = torch.ones(inputs.shape[0], device=inputs.device, dtype=torch.bool)
@@ -659,7 +679,7 @@ class YoloCTM(nn.Module):
             dtype=torch.int16,
         )
         for step in range(1, int(self.steps) + 1):
-            next_state = self._advance_ctm_state(state, inputs, feats)
+            next_state = self._advance_ctm_state(state, inputs, feats, step_index=step)
             if step > self.adaptive_min_steps:
                 mask = active.view(-1, 1, 1)
                 state = torch.where(mask, next_state, state)
@@ -957,6 +977,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--adaptive-steps", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--adaptive-min-steps", type=int, default=2)
     parser.add_argument("--adaptive-confidence-threshold", type=float, default=0.9)
+    parser.add_argument("--step-conditioning", choices=["none", "input_add"], default="none")
     parser.add_argument("--logit-bias", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logit-bias-init", choices=["zero", "prior"], default="zero")
     parser.add_argument("--logit-bias-prior-tau", type=float, default=0.4)
@@ -1579,6 +1600,7 @@ def main() -> int:
         adaptive_steps=bool(args.adaptive_steps),
         adaptive_min_steps=int(args.adaptive_min_steps),
         adaptive_confidence_threshold=float(args.adaptive_confidence_threshold),
+        step_conditioning=str(args.step_conditioning),
         logit_bias=bool(args.logit_bias),
         logit_bias_init=logit_bias_init,
     ).to(device)

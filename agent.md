@@ -279,6 +279,9 @@ Keep it short and operational.
   - using the current no-distill incumbent checkpoint with `max_steps=6`, `min_steps=4`, fixed `tau=0.4`, and thresholds `0.90`, `0.95`, and `1.00` produced identical val macro F1 `0.9092079916730437`.
   - step usage changed from `avg=4.146/max-step=0.0728` at threshold `0.90` to `avg=5.981/max-step=0.9905` at threshold `1.00`, but predictions did not change.
   - key lesson: simply running extra shared CTM recurrent updates after the 4-step incumbent is classification-invariant on validation. Future adaptive-depth work should add a step-conditioned transition, deep supervision across steps, or a learned halting head with a budget regularizer so later thoughts can change the decision boundary.
+- Next adaptive-depth candidate selected after the post-hoc diagnostic:
+  - add `step_conditioning: input_add`, a tiny learned per-step embedding added to CTM input tokens before each recurrent update, using `AutoResearch/configs/wm811k_autoresearch_stepcond_adaptive.yaml`.
+  - rationale: post-hoc extra steps did not change predictions because the shared transition appears to reach a decision-invariant state by step 4. Step conditioning gives later thoughts a distinct trainable role while adding only `steps*d_model` parameters and preserving the no-distillation, 10-epoch, val-only protocol.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).

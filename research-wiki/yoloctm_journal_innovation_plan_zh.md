@@ -306,3 +306,18 @@ threshold 1.00: avg_steps 5.981, max_step_fraction 0.9905, macro F1 0.9092079916
 2. deep supervision across steps：训练时监督 step 4/5/6 logits，避免 later states 成为无效固定点。
 3. learned halting head：用 CTM state 预测是否继续，并加预算正则，而不是 raw softmax confidence 阈值。
 ```
+
+## 12. 下一候选：Step-Conditioned Adaptive CTM
+
+Post-hoc 诊断表明，单纯重复共享 CTM transition 到第 6 步几乎不改变分类边界。因此下一候选给每个 thought step 一个极小的可学习 step embedding，加到 CTM 输入 token：
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_adaptive.yaml
+steps: 6
+adaptive_steps: true
+adaptive_min_steps: 4
+adaptive_confidence_threshold: 0.90
+step_conditioning: input_add
+```
+
+该改动只增加 `steps * d_model = 576` 个参数，不引入蒸馏、不读 test、不改数据 split，并保持最终 10 epoch 约束。它要检验的问题是：如果第 5/6 步拥有不同的条件输入，CTM 是否能把“多思考”变成真实的决策修正，而不是无效重复。
