@@ -347,6 +347,11 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str, resume_checkpoint
         str(ctm_config.get("topology_hidden_mult", 1.5)),
         "--ctm-readout",
         str(ctm_config.get("readout", "mean")),
+        "--adaptive-steps" if bool(ctm_config.get("adaptive_steps", False)) else "--no-adaptive-steps",
+        "--adaptive-min-steps",
+        str(ctm_config.get("adaptive_min_steps", 2)),
+        "--adaptive-confidence-threshold",
+        str(ctm_config.get("adaptive_confidence_threshold", 0.9)),
         "--logit-bias" if bool(ctm_config.get("logit_bias", False)) else "--no-logit-bias",
         "--logit-bias-init",
         str(ctm_config.get("logit_bias_init", "zero")),
@@ -507,6 +512,9 @@ def load_yoloctm_checkpoint(checkpoint: Path, device: str):
         topology_sector_bins=int(args.get("topology_sector_bins", 8)),
         topology_hidden_mult=float(args.get("topology_hidden_mult", 1.5)),
         ctm_readout=str(args.get("ctm_readout", "mean")),
+        adaptive_steps=bool(args.get("adaptive_steps", False)),
+        adaptive_min_steps=int(args.get("adaptive_min_steps", 2)),
+        adaptive_confidence_threshold=float(args.get("adaptive_confidence_threshold", 0.9)),
         logit_bias=bool(args.get("logit_bias", has_logit_bias)),
     ).to(torch_device)
     try:

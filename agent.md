@@ -267,6 +267,11 @@ Keep it short and operational.
   - rationale: the eligible best and constant-LR baseline both improved through epoch 10, so stronger late annealing is a local single-factor attempt to improve final 10-epoch convergence/calibration without teachers, test access, data changes, or inference-time changes.
   - result: new eligible track best `autoresearch_yoloctm_nodistill_onecycle_lr00125_finaldiv1000_tau04_e10_20260529_125012`, params `10.525M`, fixed-`tau=0.4` val acc `0.98177`, macro P `0.91271`, macro R `0.90618`, macro F1 `0.909208`; no test metrics generated. This is a validation-only improvement of `+0.006096` over the previous no-distill best `0.903112`.
   - current future-screening threshold is now validation macro F1 `0.9092079916730437`.
+- Next CTM-architecture candidate selected on 2026-06-04:
+  - implement adaptive CTM thought steps for the no-distillation track using `AutoResearch/configs/wm811k_autoresearch_adaptive_steps.yaml`.
+  - rationale: prior topology and static classwise routing candidates failed to beat the no-distilled OneCycle incumbent. Adaptive steps test a more CTM-native idea: run a fixed maximum during training, then at validation/inference let low-confidence samples continue updating while high-confidence samples freeze early.
+  - recipe: `steps: 6`, `adaptive_min_steps: 4`, `adaptive_confidence_threshold: 0.90`, no distillation, no test metrics, fixed 10 epochs, and keep threshold `0.9092079916730437`.
+  - implementation note: validation history now records `val_adaptive_avg_steps` and `val_adaptive_max_step_fraction` so the result can be interpreted as both accuracy and dynamic-depth behavior.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).

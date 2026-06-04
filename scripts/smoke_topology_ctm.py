@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from train_wm811k_yoloctm import TopologyConditionedCTMBlock, WaferTopologyAdapterGate
+from train_wm811k_yoloctm import LowRankYoloHead, TopologyConditionedCTMBlock, WaferTopologyAdapterGate, YoloCTM
 
 
 def main() -> int:
@@ -34,6 +34,24 @@ def main() -> int:
         raise AssertionError(f"adapter gate shape mismatch: {gate.shape}")
     if not torch.isfinite(gate).all():
         raise AssertionError("adapter gate contains non-finite values")
+
+    model = YoloCTM(
+        backbone=torch.nn.Identity(),
+        yolo_head=LowRankYoloHead(in_dim=8, num_classes=3, hidden_dim=16),
+        num_classes=3,
+        in_dim=8,
+        d_model=16,
+        steps=4,
+        adaptive_steps=True,
+        adaptive_min_steps=2,
+        adaptive_confidence_threshold=0.99,
+    )
+    model.eval()
+    logits = model(torch.randn(2, 8, 7, 7))
+    if logits.shape != (2, 3):
+        raise AssertionError(f"adaptive YoloCTM logits shape mismatch: {logits.shape}")
+    if not torch.isfinite(logits).all():
+        raise AssertionError("adaptive YoloCTM logits contain non-finite values")
     print("Topology CTM smoke ok")
     return 0
 

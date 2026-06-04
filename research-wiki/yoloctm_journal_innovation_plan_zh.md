@@ -210,3 +210,31 @@ threshold: 0.9092079916730437
 该候选在 `topology_gate` 上加入 `classwise_logprob` expert routing，结果没有超过 `topology_adapter_gate` 的 0.902783。它的行为是 precision 明显升高、recall 明显下降：`Center`、`Donut`、`Random`、`Scratch` 的 precision 更好，但 `Loc` 和 `Near-full` recall 损失较大。说明静态类别级路由会变得保守，不能真正解决“哪些样本需要更多 CTM 思考”的问题。
 
 更自然的下一步是 **Adaptive CTM Steps**：训练仍用固定最大步数，验证/推理时先运行较少 thought steps；若当前 logits 的最大 softmax 置信度低于阈值，则继续执行额外 CTM steps。这个方案更贴近 CTM 的本体叙事：模型不是固定算力分类器，而是样本难度驱动的动态思考分类器。
+
+## 11. 下一候选：Adaptive CTM Steps
+
+已实现自适应 CTM thought steps，并新增候选配置：
+
+```text
+AutoResearch/configs/wm811k_autoresearch_adaptive_steps.yaml
+```
+
+核心设置：
+
+```text
+steps: 6
+adaptive_steps: true
+adaptive_min_steps: 4
+adaptive_confidence_threshold: 0.90
+feature_fusion: residual
+token_mixer: none
+```
+
+实现约定：
+
+```text
+训练阶段：固定运行 max_steps=6，避免训练目标和 batch 内控制流漂移。
+验证/推理：至少运行 4 步；若当前最大 softmax 置信度 < 0.90，则继续运行，最多到 6 步。
+```
+
+这个方向比静态 topology/classwise routing 更像 CTM 的优势：模型可以按样本难度分配思考深度。若该候选提升 macro F1，则后续可以进一步记录每类平均使用步数、低置信样本分布、步数-准确率曲线；若不提升，则应尝试保持训练 `steps=4`、只在推理时额外走到 6 步的 post-hoc adaptive evaluation，以区分“训练更多步导致过拟合”与“动态推理策略本身无效”。

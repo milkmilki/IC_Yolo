@@ -444,6 +444,9 @@ class YoloCTM(nn.Module):
         topology_sector_bins: int = 8,
         topology_hidden_mult: float = 1.5,
         ctm_readout: str = "mean",
+        adaptive_steps: bool = False,
+        adaptive_min_steps: int = 2,
+        adaptive_confidence_threshold: float = 0.90,
         logit_bias: bool = False,
         logit_bias_init: torch.Tensor | None = None,
     ) -> None:
@@ -492,6 +495,14 @@ class YoloCTM(nn.Module):
             else CTMBlock(d_model=d_model, dropout=dropout)
         )
         self.steps = steps
+        self.adaptive_steps_enabled = bool(adaptive_steps)
+        self.adaptive_min_steps = max(1, int(adaptive_min_steps))
+        self.adaptive_confidence_threshold = float(adaptive_confidence_threshold)
+        if self.adaptive_min_steps > int(self.steps):
+            raise ValueError("adaptive_min_steps must be <= steps")
+        if not 0.0 < self.adaptive_confidence_threshold <= 1.0:
+            raise ValueError("adaptive_confidence_threshold must be in (0, 1]")
+        self.last_adaptive_steps_used: torch.Tensor | None = None
         self.norm = nn.LayerNorm(d_model)
         self.ctm_readout = str(ctm_readout).lower()
         if self.ctm_readout not in {"mean", "attention"}:
@@ -610,14 +621,77 @@ class YoloCTM(nn.Module):
             if self.topology_mixer is None:
                 raise RuntimeError("Wafer topology mixer parameters are not initialized")
             inputs = self.topology_mixer(inputs, feats.shape[-2], feats.shape[-1])
-        state = torch.zeros_like(inputs)
-        for _ in range(self.steps):
-            if self.token_mixer_type == "topology_ctm" and feats.ndim == 4:
-                state = self.ctm_block(state, inputs, feats.shape[-2], feats.shape[-1])
-            else:
-                state = self.ctm_block(state, inputs)
+        state = self._run_ctm(inputs, feats)
+        logits, ctm_logits, clean_yolo_logits, pooled = self._logits_from_state(
+            feats,
+            state,
+            return_clean=return_clean,
+        )
+        outputs = [logits]
+        if return_aux:
+            outputs.append(ctm_logits)
+        if return_clean:
+            if clean_yolo_logits is None:
+                raise RuntimeError("clean_yolo_logits was not computed")
+            outputs.append(clean_yolo_logits)
+        if return_embedding:
+            outputs.append(pooled)
+        return outputs[0] if len(outputs) == 1 else tuple(outputs)
 
-        state = self.norm(state)
+    def _advance_ctm_state(self, state: torch.Tensor, inputs: torch.Tensor, feats: torch.Tensor) -> torch.Tensor:
+        if self.token_mixer_type == "topology_ctm" and feats.ndim == 4:
+            return self.ctm_block(state, inputs, feats.shape[-2], feats.shape[-1])
+        return self.ctm_block(state, inputs)
+
+    def _run_ctm(self, inputs: torch.Tensor, feats: torch.Tensor) -> torch.Tensor:
+        self.last_adaptive_steps_used = None
+        state = torch.zeros_like(inputs)
+        if not self.adaptive_steps_enabled or self.training or int(self.steps) <= self.adaptive_min_steps:
+            for _ in range(self.steps):
+                state = self._advance_ctm_state(state, inputs, feats)
+            return self.norm(state)
+
+        active = torch.ones(inputs.shape[0], device=inputs.device, dtype=torch.bool)
+        steps_used = torch.full(
+            (inputs.shape[0],),
+            int(self.steps),
+            device=inputs.device,
+            dtype=torch.int16,
+        )
+        for step in range(1, int(self.steps) + 1):
+            next_state = self._advance_ctm_state(state, inputs, feats)
+            if step > self.adaptive_min_steps:
+                mask = active.view(-1, 1, 1)
+                state = torch.where(mask, next_state, state)
+            else:
+                state = next_state
+
+            if step >= self.adaptive_min_steps and step < int(self.steps):
+                logits, _ctm_logits, _clean_yolo_logits, _pooled = self._logits_from_state(
+                    feats,
+                    self.norm(state),
+                    return_clean=False,
+                )
+                confidence = torch.softmax(logits, dim=1).amax(dim=1)
+                finished = active & (confidence >= self.adaptive_confidence_threshold)
+                if bool(finished.any()):
+                    steps_used = torch.where(
+                        finished,
+                        torch.full_like(steps_used, int(step)),
+                        steps_used,
+                    )
+                active = active & (confidence < self.adaptive_confidence_threshold)
+                if not bool(active.any()):
+                    break
+        self.last_adaptive_steps_used = steps_used.detach()
+        return self.norm(state)
+
+    def _logits_from_state(
+        self,
+        feats: torch.Tensor,
+        state: torch.Tensor,
+        return_clean: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor]:
         pooled = self._pool_ctm_state(state)
         needs_clean_branch = return_clean or self.expert_fusion == "classwise_logprob"
         clean_yolo_logits = self._as_logits(self.yolo_head(feats)) if needs_clean_branch else None
@@ -652,16 +726,7 @@ class YoloCTM(nn.Module):
             )
         if self.logit_bias is not None:
             logits = logits + self.logit_bias.view(1, -1)
-        outputs = [logits]
-        if return_aux:
-            outputs.append(ctm_logits)
-        if return_clean:
-            if clean_yolo_logits is None:
-                raise RuntimeError("clean_yolo_logits was not computed")
-            outputs.append(clean_yolo_logits)
-        if return_embedding:
-            outputs.append(pooled)
-        return outputs[0] if len(outputs) == 1 else tuple(outputs)
+        return logits, ctm_logits, clean_yolo_logits, pooled
 
     def _pool_ctm_state(self, state: torch.Tensor) -> torch.Tensor:
         if self.ctm_readout == "mean":
@@ -889,6 +954,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--topology-sector-bins", type=int, default=8)
     parser.add_argument("--topology-hidden-mult", type=float, default=1.5)
     parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
+    parser.add_argument("--adaptive-steps", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--adaptive-min-steps", type=int, default=2)
+    parser.add_argument("--adaptive-confidence-threshold", type=float, default=0.9)
     parser.add_argument("--logit-bias", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logit-bias-init", choices=["zero", "prior"], default="zero")
     parser.add_argument("--logit-bias-prior-tau", type=float, default=0.4)
@@ -1356,13 +1424,16 @@ def evaluate(
     criterion: nn.Module,
     device: torch.device,
     prediction_logit_bias: torch.Tensor | None = None,
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, dict[str, float]]:
     model.eval()
     total_loss = 0.0
     correct = 0
     total = 0
     y_true: list[int] = []
     y_pred: list[int] = []
+    adaptive_step_sum = 0.0
+    adaptive_step_total = 0
+    adaptive_max_step_count = 0
     with torch.no_grad():
         for batch in loader:
             images, labels, _indices = unpack_batch(batch)
@@ -1378,8 +1449,19 @@ def evaluate(
             total += labels.size(0)
             y_true.extend(labels.cpu().tolist())
             y_pred.extend(preds.cpu().tolist())
+            steps_used = getattr(model, "last_adaptive_steps_used", None)
+            if steps_used is not None:
+                steps_cpu = steps_used.detach().cpu().float()
+                adaptive_step_sum += steps_cpu.sum().item()
+                adaptive_step_total += int(steps_cpu.numel())
+                max_steps = int(getattr(model, "steps", 0))
+                adaptive_max_step_count += int((steps_cpu >= max_steps).sum().item())
     macro_f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
-    return total_loss / max(total, 1), correct / max(total, 1), macro_f1
+    adaptive_stats: dict[str, float] = {}
+    if adaptive_step_total > 0:
+        adaptive_stats["adaptive_avg_steps"] = adaptive_step_sum / adaptive_step_total
+        adaptive_stats["adaptive_max_step_fraction"] = adaptive_max_step_count / adaptive_step_total
+    return total_loss / max(total, 1), correct / max(total, 1), macro_f1, adaptive_stats
 
 
 def main() -> int:
@@ -1494,6 +1576,9 @@ def main() -> int:
         topology_sector_bins=int(args.topology_sector_bins),
         topology_hidden_mult=float(args.topology_hidden_mult),
         ctm_readout=str(args.ctm_readout),
+        adaptive_steps=bool(args.adaptive_steps),
+        adaptive_min_steps=int(args.adaptive_min_steps),
+        adaptive_confidence_threshold=float(args.adaptive_confidence_threshold),
         logit_bias=bool(args.logit_bias),
         logit_bias_init=logit_bias_init,
     ).to(device)
@@ -1705,24 +1790,33 @@ def main() -> int:
             epoch=epoch,
         )
         selection_model = ema_model if ema_model is not None else model
-        val_loss, val_acc, val_macro_f1 = evaluate(
+        val_loss, val_acc, val_macro_f1, val_adaptive_stats = evaluate(
             selection_model,
             val_loader,
             train_criterion,
             device,
             prediction_logit_bias=selection_logit_bias,
         )
-        history.append({
+        history_entry = {
             "epoch": epoch,
             "train_loss": train_loss,
             "train_acc": train_acc,
             "val_loss": val_loss,
             "val_acc": val_acc,
             "val_macro_f1": val_macro_f1,
-        })
+        }
+        history_entry.update({f"val_{key}": value for key, value in val_adaptive_stats.items()})
+        history.append(history_entry)
+        adaptive_text = ""
+        if val_adaptive_stats:
+            adaptive_text = (
+                f" val_adaptive_avg_steps={val_adaptive_stats['adaptive_avg_steps']:.3f} "
+                f"val_adaptive_max_step_fraction={val_adaptive_stats['adaptive_max_step_fraction']:.3f}"
+            )
         print(
             f"Epoch {epoch:03d}: train_loss={train_loss:.4f} train_acc={train_acc:.4f} "
-            f"val_loss={val_loss:.4f} val_acc={val_acc:.4f} val_macro_f1={val_macro_f1:.4f}",
+            f"val_loss={val_loss:.4f} val_acc={val_acc:.4f} val_macro_f1={val_macro_f1:.4f}"
+            f"{adaptive_text}",
             flush=True,
         )
         if val_macro_f1 > best_val_f1:
