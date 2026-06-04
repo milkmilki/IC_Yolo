@@ -191,3 +191,22 @@ threshold: 0.9092079916730437
 结论：拓扑先验越靠近主表征动力学，越容易破坏 YOLO 的局部判别边界；把拓扑放到 residual routing 位置明显更稳，但仍没有超过强 baseline。类别层面，`topology_adapter_gate` 对 `Donut`、`Near-full`、`Random`、`Scratch` 的 F1 明显优于 `topology_ctm`，说明“拓扑只决定 residual 注入位置”的判断是对的；主要短板仍在 `Loc` 和部分 `Edge-Loc`，这些类别需要更精细的局部空间证据，而不是更强全局拓扑。
 
 下一步建议转向 **Class-Conditional Topology Adapter**：保持 `feature_fusion=topology_gate` 的稳定框架，但让 residual gate 或 CTM logit 融合按类别组区分。例如将类别粗分为 radial classes（Center、Edge-Loc、Edge-Ring、Donut、Near-full）和 local morphology classes（Loc、Scratch、Random），拓扑 gate 只强作用于 radial classes，对局部形态类保留更接近 vanilla residual 的路径。这样论文叙事可以从“拓扑先验”升级为“类别条件的拓扑-形态双路径推理”，更符合晶圆缺陷类别的异质性。
+
+## 10. 2026-06-04 `topology_adapter_classwise` 实验结果
+
+完整 10 epoch、无蒸馏、val-only 实验已经完成：
+
+```text
+run: autoresearch_yoloctm_nodistill_topology_adapter_classwise_tau04_e10_20260604_143945
+status: discard
+params: 10.574M
+val acc: 0.9808433549182856
+val macro P: 0.9191195527415241
+val macro R: 0.8859787350464476
+val macro F1: 0.9011464114019737
+threshold: 0.9092079916730437
+```
+
+该候选在 `topology_gate` 上加入 `classwise_logprob` expert routing，结果没有超过 `topology_adapter_gate` 的 0.902783。它的行为是 precision 明显升高、recall 明显下降：`Center`、`Donut`、`Random`、`Scratch` 的 precision 更好，但 `Loc` 和 `Near-full` recall 损失较大。说明静态类别级路由会变得保守，不能真正解决“哪些样本需要更多 CTM 思考”的问题。
+
+更自然的下一步是 **Adaptive CTM Steps**：训练仍用固定最大步数，验证/推理时先运行较少 thought steps；若当前 logits 的最大 softmax 置信度低于阈值，则继续执行额外 CTM steps。这个方案更贴近 CTM 的本体叙事：模型不是固定算力分类器，而是样本难度驱动的动态思考分类器。
