@@ -46,6 +46,8 @@ def main() -> int:
         adaptive_min_steps=2,
         adaptive_confidence_threshold=0.99,
         step_conditioning="input_add",
+        adaptive_halt_policy="learned",
+        learned_halt_threshold=0.5,
     )
     model.eval()
     logits = model(torch.randn(2, 8, 7, 7))

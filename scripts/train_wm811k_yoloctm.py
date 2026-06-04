@@ -448,6 +448,8 @@ class YoloCTM(nn.Module):
         adaptive_min_steps: int = 2,
         adaptive_confidence_threshold: float = 0.90,
         step_conditioning: str = "none",
+        adaptive_halt_policy: str = "confidence",
+        learned_halt_threshold: float = 0.5,
         logit_bias: bool = False,
         logit_bias_init: torch.Tensor | None = None,
     ) -> None:
@@ -503,8 +505,15 @@ class YoloCTM(nn.Module):
             raise ValueError("adaptive_min_steps must be <= steps")
         if not 0.0 < self.adaptive_confidence_threshold <= 1.0:
             raise ValueError("adaptive_confidence_threshold must be in (0, 1]")
+        self.adaptive_halt_policy = str(adaptive_halt_policy).lower()
+        if self.adaptive_halt_policy not in {"confidence", "learned"}:
+            raise ValueError("adaptive_halt_policy must be one of: confidence, learned")
+        self.learned_halt_threshold = float(learned_halt_threshold)
+        if not 0.0 < self.learned_halt_threshold <= 1.0:
+            raise ValueError("learned_halt_threshold must be in (0, 1]")
         self.last_adaptive_steps_used: torch.Tensor | None = None
         self.last_step_logits: dict[int, torch.Tensor] = {}
+        self.last_step_halt_logits: dict[int, torch.Tensor] = {}
         self.step_conditioning = str(step_conditioning).lower()
         if self.step_conditioning not in {"none", "input_add"}:
             raise ValueError("step_conditioning must be one of: none, input_add")
@@ -517,6 +526,7 @@ class YoloCTM(nn.Module):
         self.ctm_readout = str(ctm_readout).lower()
         if self.ctm_readout not in {"mean", "attention"}:
             raise ValueError("ctm_readout must be one of: mean, attention")
+        self.halt_head = nn.Linear(d_model, 1) if self.adaptive_halt_policy == "learned" else None
         if self.ctm_readout == "attention":
             self.readout_query = nn.Parameter(torch.zeros(d_model))
         self.ctm_cls = nn.Linear(d_model, num_classes)
@@ -667,17 +677,22 @@ class YoloCTM(nn.Module):
     def _run_ctm(self, inputs: torch.Tensor, feats: torch.Tensor) -> torch.Tensor:
         self.last_adaptive_steps_used = None
         self.last_step_logits = {}
+        self.last_step_halt_logits = {}
         state = torch.zeros_like(inputs)
         if not self.adaptive_steps_enabled or self.training or int(self.steps) <= self.adaptive_min_steps:
             for step in range(1, int(self.steps) + 1):
                 state = self._advance_ctm_state(state, inputs, feats, step_index=step)
                 if self.training:
+                    normalized_state = self.norm(state)
                     logits, _ctm_logits, _clean_yolo_logits, _pooled = self._logits_from_state(
                         feats,
-                        self.norm(state),
+                        normalized_state,
                         return_clean=False,
                     )
                     self.last_step_logits[step] = logits
+                    if self.halt_head is not None:
+                        halt_features = self._pool_ctm_state(normalized_state)
+                        self.last_step_halt_logits[step] = self.halt_head(halt_features).squeeze(-1)
             return self.norm(state)
 
         active = torch.ones(inputs.shape[0], device=inputs.device, dtype=torch.bool)
@@ -696,20 +711,29 @@ class YoloCTM(nn.Module):
                 state = next_state
 
             if step >= self.adaptive_min_steps and step < int(self.steps):
+                normalized_state = self.norm(state)
                 logits, _ctm_logits, _clean_yolo_logits, _pooled = self._logits_from_state(
                     feats,
-                    self.norm(state),
+                    normalized_state,
                     return_clean=False,
                 )
-                confidence = torch.softmax(logits, dim=1).amax(dim=1)
-                finished = active & (confidence >= self.adaptive_confidence_threshold)
+                if self.adaptive_halt_policy == "learned":
+                    if self.halt_head is None:
+                        raise RuntimeError("learned halting policy requires halt_head")
+                    halt_features = self._pool_ctm_state(normalized_state)
+                    halt_score = torch.sigmoid(self.halt_head(halt_features).squeeze(-1))
+                    should_halt = halt_score >= self.learned_halt_threshold
+                else:
+                    confidence = torch.softmax(logits, dim=1).amax(dim=1)
+                    should_halt = confidence >= self.adaptive_confidence_threshold
+                finished = active & should_halt
                 if bool(finished.any()):
                     steps_used = torch.where(
                         finished,
                         torch.full_like(steps_used, int(step)),
                         steps_used,
                     )
-                active = active & (confidence < self.adaptive_confidence_threshold)
+                active = active & (~should_halt)
                 if not bool(active.any()):
                     break
         self.last_adaptive_steps_used = steps_used.detach()
@@ -987,6 +1011,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--adaptive-min-steps", type=int, default=2)
     parser.add_argument("--adaptive-confidence-threshold", type=float, default=0.9)
     parser.add_argument("--step-conditioning", choices=["none", "input_add"], default="none")
+    parser.add_argument("--adaptive-halt-policy", choices=["confidence", "learned"], default="confidence")
+    parser.add_argument("--learned-halt-threshold", type=float, default=0.5)
     parser.add_argument("--logit-bias", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--logit-bias-init", choices=["zero", "prior"], default="zero")
     parser.add_argument("--logit-bias-prior-tau", type=float, default=0.4)
@@ -1016,6 +1042,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
     parser.add_argument("--step-supervision-weight", type=float, default=0.0)
     parser.add_argument("--step-supervision-steps", default="")
+    parser.add_argument("--learned-halt-loss-weight", type=float, default=0.0)
+    parser.add_argument("--learned-halt-confidence-threshold", type=float, default=0.9)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax", "ldam_drw"], default="weighted_ce")
     parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--ldam-max-margin", type=float, default=0.2)
@@ -1264,6 +1292,8 @@ def compute_train_loss_and_logits(
     classifier_cbr_power: float = 1.0,
     step_supervision_weight: float = 0.0,
     step_supervision_steps: tuple[int, ...] = (),
+    learned_halt_loss_weight: float = 0.0,
+    learned_halt_confidence_threshold: float = 0.9,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     need_embedding = float(prototype_bcl_weight) > 0
     embedding = None
@@ -1325,6 +1355,21 @@ def compute_train_loss_and_logits(
                 aux_losses.append(criterion(logits_at_step, labels))
         if aux_losses:
             loss = loss + float(step_supervision_weight) * torch.stack(aux_losses).mean()
+    if learned_halt_loss_weight > 0:
+        step_logits = getattr(model, "last_step_logits", {})
+        step_halt_logits = getattr(model, "last_step_halt_logits", {})
+        halt_losses: list[torch.Tensor] = []
+        for step, halt_logits in step_halt_logits.items():
+            logits_at_step = step_logits.get(int(step))
+            if logits_at_step is None:
+                continue
+            with torch.no_grad():
+                probs = torch.softmax(logits_at_step, dim=1)
+                confidence, preds = probs.max(dim=1)
+                target = ((preds == labels) & (confidence >= float(learned_halt_confidence_threshold))).float()
+            halt_losses.append(F.binary_cross_entropy_with_logits(halt_logits, target))
+        if halt_losses:
+            loss = loss + float(learned_halt_loss_weight) * torch.stack(halt_losses).mean()
     return loss, logits
 
 
@@ -1349,6 +1394,8 @@ def train_one_epoch(
     classifier_cbr_power: float = 1.0,
     step_supervision_weight: float = 0.0,
     step_supervision_steps: tuple[int, ...] = (),
+    learned_halt_loss_weight: float = 0.0,
+    learned_halt_confidence_threshold: float = 0.9,
     grad_accum_steps: int = 1,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
     sam_rho: float = 0.0,
@@ -1392,6 +1439,8 @@ def train_one_epoch(
             classifier_cbr_power=classifier_cbr_power,
             step_supervision_weight=step_supervision_weight,
             step_supervision_steps=step_supervision_steps,
+            learned_halt_loss_weight=learned_halt_loss_weight,
+            learned_halt_confidence_threshold=learned_halt_confidence_threshold,
         )
 
     for batch_index, batch in enumerate(loader):
@@ -1627,6 +1676,8 @@ def main() -> int:
         adaptive_min_steps=int(args.adaptive_min_steps),
         adaptive_confidence_threshold=float(args.adaptive_confidence_threshold),
         step_conditioning=str(args.step_conditioning),
+        adaptive_halt_policy=str(args.adaptive_halt_policy),
+        learned_halt_threshold=float(args.learned_halt_threshold),
         logit_bias=bool(args.logit_bias),
         logit_bias_init=logit_bias_init,
     ).to(device)
@@ -1739,6 +1790,14 @@ def main() -> int:
             f"[step_supervision] weight={float(args.step_supervision_weight):.4f} "
             f"steps={','.join(str(step) for step in step_supervision_steps)}"
         )
+    if str(args.adaptive_halt_policy) == "learned":
+        if float(args.learned_halt_loss_weight) <= 0:
+            raise ValueError("learned halt policy requires --learned-halt-loss-weight > 0")
+        print(
+            f"[learned_halt] threshold={float(args.learned_halt_threshold):.4f} "
+            f"loss_weight={float(args.learned_halt_loss_weight):.4f} "
+            f"target_confidence={float(args.learned_halt_confidence_threshold):.4f}"
+        )
 
     out_dir = Path(args.project) / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1847,6 +1906,8 @@ def main() -> int:
             classifier_cbr_power=float(args.classifier_cbr_power),
             step_supervision_weight=float(args.step_supervision_weight),
             step_supervision_steps=step_supervision_steps,
+            learned_halt_loss_weight=float(args.learned_halt_loss_weight),
+            learned_halt_confidence_threshold=float(args.learned_halt_confidence_threshold),
             grad_accum_steps=grad_accum_steps,
             scheduler=scheduler,
             sam_rho=float(args.sam_rho),

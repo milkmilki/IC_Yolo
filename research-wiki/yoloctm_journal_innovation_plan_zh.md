@@ -377,3 +377,20 @@ step_supervision_steps: [4, 6]
 ```
 
 动机：step-conditioned 6-step dynamics 已经超过 no-distill incumbent，但 post-hoc 阈值扫显示评估时第 4/6 步选择仍不改变预测。deep supervision 让最少步数 state 和最大步数 state 都直接对分类目标负责，测试是否能让 later thought 更稳定地改善 minority defect 边界。该改动训练期生效，不增加推理参数，不使用蒸馏，不读取 test，并保持 10 epoch。
+
+## 14. 候选储备：Step-Conditioned CTM + Learned Halting
+
+当 GPU 被非训练图形任务占用时，先准备 learned-halting 后续候选：
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_learnedhalt.yaml
+step_conditioning: input_add
+adaptive_halt_policy: learned
+learned_halt_threshold: 0.5
+learned_halt_loss_weight: 0.05
+learned_halt_confidence_threshold: 0.90
+```
+
+训练目标：每个 thought step 都可产生 logits；若该步预测正确且最大 softmax 置信度超过 `0.90`，halt target 为 1，否则为 0。推理时不再用 raw softmax threshold 决定是否继续，而用 CTM state 上的 halt head 输出决定样本是否需要更多 thought steps。
+
+注意：这条候选应排在 `stepcond_deepsup` 之后运行，避免把 deep supervision 和 learned halting 的因果证据混在一起。

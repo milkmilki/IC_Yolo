@@ -288,6 +288,10 @@ Keep it short and operational.
 - Next adaptive-depth candidate after the step-conditioned keep:
   - add training-only deep supervision on step `4` and step `6` logits with `step_supervision_weight: 0.1` using `AutoResearch/configs/wm811k_autoresearch_stepcond_deepsup.yaml`.
   - rationale: the keep result shows step-conditioned dynamics help, while threshold sweeps still leave predictions invariant. Deep supervision tests whether explicitly classification-aligning both the minimum and maximum thought states can make intermediate/final CTM states more useful without changing inference parameters, distillation, test access, or the 10-epoch budget.
+- Prepared follow-up adaptive-depth candidate while GPU was occupied by non-training graphics workloads:
+  - add `adaptive_halt_policy: learned` with a tiny halt head and `learned_halt_loss_weight: 0.05` using `AutoResearch/configs/wm811k_autoresearch_stepcond_learnedhalt.yaml`.
+  - rationale: raw confidence halting did not affect predictions. The learned halt head is trained from step-wise labels: stop when the current thought-state prediction is correct and confidence exceeds `0.90`; at inference it decides whether a sample should continue after `adaptive_min_steps`.
+  - run this only after the already-prepared `stepcond_deepsup` candidate is evaluated or deliberately skipped, so single-factor evidence stays interpretable.
 - External generalization track requested on 2026-05-27:
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).
