@@ -272,3 +272,37 @@ Near-full:  0.9130 -> 0.8636  (-0.0494)
 ```
 
 解释：`max_steps=6` 训练没有带来整体收益，且验证时大多数样本在 4 步附近早停。它证明了“动态深度”是可实现和可观测的，但 raw confidence-threshold halting 主要改善 `Scratch`，同时损失小样本类与局部缺陷类的平衡。下一步不应扫 test 阈值；更合理的是保留当前最佳 `steps=4` checkpoint，只做 post-hoc low-confidence extra steps 到 6，或引入带预算正则的 learned halting head。
+
+### Post-hoc adaptive-depth 诊断
+
+新增工具：
+
+```text
+scripts/evaluate_yoloctm_posthoc_adaptive.py
+```
+
+该工具加载已训练 checkpoint，临时覆盖 `max_steps/min_steps/confidence_threshold`，只在验证/推理时改变 CTM 步数，不重新训练。对当前 no-distill incumbent：
+
+```text
+checkpoint: autoresearch_yoloctm_nodistill_onecycle_lr00125_finaldiv1000_tau04_e10_20260529_125012/best_yoloctm.pt
+split: val
+prior_logit_tau: 0.4
+max_steps: 6
+min_steps: 4
+```
+
+结果：
+
+```text
+threshold 0.90: avg_steps 4.146, max_step_fraction 0.0728, macro F1 0.9092079916730437
+threshold 0.95: avg_steps 4.199, max_step_fraction 0.0996, macro F1 0.9092079916730437
+threshold 1.00: avg_steps 5.981, max_step_fraction 0.9905, macro F1 0.9092079916730437
+```
+
+诊断结论：额外共享 CTM recurrent updates 在当前 4-step incumbent 上几乎不改变分类边界；即使近似所有样本都跑到 6 步，macro F1 和预测仍保持不变。因此下一阶段要让“多想几步”有表达能力，不能只重复同一个 transition。更有希望的结构是：
+
+```text
+1. step-conditioned CTM transition：每个 thought step 加入可学习 step embedding 或轻量 FiLM，使第 5/6 步具备不同功能。
+2. deep supervision across steps：训练时监督 step 4/5/6 logits，避免 later states 成为无效固定点。
+3. learned halting head：用 CTM state 预测是否继续，并加预算正则，而不是 raw softmax confidence 阈值。
+```
