@@ -164,3 +164,30 @@ F' = F + alpha * G * R             # 只控制 residual 注入位置
 ```
 
 该候选比 `wafer_topology` 和 `topology_ctm` 更保守：拓扑信息不再直接修改 token 或 state，只作为 residual adapter 的空间选择器。若它仍低于 baseline，说明当前拓扑离散先验本身与 YOLO26m 的高层特征粒度不匹配，下一步应转向多尺度特征 taps 或 class-conditional adapter routing；若它接近或超过 0.9092，则可以作为期刊主结构继续做 gate 可视化、class-level ablation 和 topology bins 消融。
+
+## 9. 2026-06-04 `topology_adapter_gate` 实验结果
+
+完整 10 epoch、无蒸馏、val-only 实验已经完成：
+
+```text
+run: autoresearch_yoloctm_nodistill_topology_adapter_gate_tau04_e10_20260604_103951
+status: discard
+params: 10.574M
+val acc: 0.979031760715387
+val macro P: 0.8892699071018719
+val macro R: 0.9183771758494369
+val macro F1: 0.9027825886463575
+threshold: 0.9092079916730437
+```
+
+这个结果低于当前 best 0.909208，但显著好于两种更强拓扑注入：
+
+| 候选 | 拓扑进入位置 | Val macro F1 |
+|---|---|---:|
+| `wafer_topology` | CTM 输入 token 前置 mixer | 0.890201 |
+| `topology_ctm` | 每步 CTM state update 条件注入 | 0.884415 |
+| `topology_adapter_gate` | CTM residual adapter 空间门控 | 0.902783 |
+
+结论：拓扑先验越靠近主表征动力学，越容易破坏 YOLO 的局部判别边界；把拓扑放到 residual routing 位置明显更稳，但仍没有超过强 baseline。类别层面，`topology_adapter_gate` 对 `Donut`、`Near-full`、`Random`、`Scratch` 的 F1 明显优于 `topology_ctm`，说明“拓扑只决定 residual 注入位置”的判断是对的；主要短板仍在 `Loc` 和部分 `Edge-Loc`，这些类别需要更精细的局部空间证据，而不是更强全局拓扑。
+
+下一步建议转向 **Class-Conditional Topology Adapter**：保持 `feature_fusion=topology_gate` 的稳定框架，但让 residual gate 或 CTM logit 融合按类别组区分。例如将类别粗分为 radial classes（Center、Edge-Loc、Edge-Ring、Donut、Near-full）和 local morphology classes（Loc、Scratch、Random），拓扑 gate 只强作用于 radial classes，对局部形态类保留更接近 vanilla residual 的路径。这样论文叙事可以从“拓扑先验”升级为“类别条件的拓扑-形态双路径推理”，更符合晶圆缺陷类别的异质性。
