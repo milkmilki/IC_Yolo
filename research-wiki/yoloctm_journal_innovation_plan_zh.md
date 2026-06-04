@@ -364,3 +364,16 @@ threshold 1.00: avg_steps 5.982, max_step_fraction 0.9912, macro F1 0.9107459161
 ```
 
 解释：step-conditioned transition 确实带来新的 validation best，但 post-hoc 阈值诊断显示性能提升不是来自 raw confidence halting，而是来自训练阶段的 step-conditioned 6-step dynamics。也就是说，“第几步”的可学习条件信息让 CTM 训练出更好的状态轨迹；但当前分类边界在评估时仍对第 4/6 步选择不敏感。下一步若继续 adaptive-depth，应转向 deep supervision across steps 或 learned halting，而不是继续扫 confidence threshold。
+
+## 13. 下一候选：Step-Conditioned CTM + Deep Supervision
+
+基于上一节 keep 结果，下一候选只增加训练期辅助监督：
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_deepsup.yaml
+step_conditioning: input_add
+step_supervision_weight: 0.1
+step_supervision_steps: [4, 6]
+```
+
+动机：step-conditioned 6-step dynamics 已经超过 no-distill incumbent，但 post-hoc 阈值扫显示评估时第 4/6 步选择仍不改变预测。deep supervision 让最少步数 state 和最大步数 state 都直接对分类目标负责，测试是否能让 later thought 更稳定地改善 minority defect 边界。该改动训练期生效，不增加推理参数，不使用蒸馏，不读取 test，并保持 10 epoch。

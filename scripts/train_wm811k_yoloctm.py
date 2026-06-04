@@ -504,6 +504,7 @@ class YoloCTM(nn.Module):
         if not 0.0 < self.adaptive_confidence_threshold <= 1.0:
             raise ValueError("adaptive_confidence_threshold must be in (0, 1]")
         self.last_adaptive_steps_used: torch.Tensor | None = None
+        self.last_step_logits: dict[int, torch.Tensor] = {}
         self.step_conditioning = str(step_conditioning).lower()
         if self.step_conditioning not in {"none", "input_add"}:
             raise ValueError("step_conditioning must be one of: none, input_add")
@@ -665,10 +666,18 @@ class YoloCTM(nn.Module):
 
     def _run_ctm(self, inputs: torch.Tensor, feats: torch.Tensor) -> torch.Tensor:
         self.last_adaptive_steps_used = None
+        self.last_step_logits = {}
         state = torch.zeros_like(inputs)
         if not self.adaptive_steps_enabled or self.training or int(self.steps) <= self.adaptive_min_steps:
             for step in range(1, int(self.steps) + 1):
                 state = self._advance_ctm_state(state, inputs, feats, step_index=step)
+                if self.training:
+                    logits, _ctm_logits, _clean_yolo_logits, _pooled = self._logits_from_state(
+                        feats,
+                        self.norm(state),
+                        return_clean=False,
+                    )
+                    self.last_step_logits[step] = logits
             return self.norm(state)
 
         active = torch.ones(inputs.shape[0], device=inputs.device, dtype=torch.bool)
@@ -1005,6 +1014,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--classifier-cbr-weight", type=float, default=0.0)
     parser.add_argument("--classifier-cbr-power", type=float, default=1.0)
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
+    parser.add_argument("--step-supervision-weight", type=float, default=0.0)
+    parser.add_argument("--step-supervision-steps", default="")
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax", "ldam_drw"], default="weighted_ce")
     parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--ldam-max-margin", type=float, default=0.2)
@@ -1251,6 +1262,8 @@ def compute_train_loss_and_logits(
     class_counts: torch.Tensor | None = None,
     classifier_cbr_weight: float = 0.0,
     classifier_cbr_power: float = 1.0,
+    step_supervision_weight: float = 0.0,
+    step_supervision_steps: tuple[int, ...] = (),
 ) -> tuple[torch.Tensor, torch.Tensor]:
     need_embedding = float(prototype_bcl_weight) > 0
     embedding = None
@@ -1303,6 +1316,15 @@ def compute_train_loss_and_logits(
             class_counts,
             power=float(classifier_cbr_power),
         )
+    if step_supervision_weight > 0 and step_supervision_steps:
+        step_logits = getattr(model, "last_step_logits", {})
+        aux_losses: list[torch.Tensor] = []
+        for step in step_supervision_steps:
+            logits_at_step = step_logits.get(int(step))
+            if logits_at_step is not None:
+                aux_losses.append(criterion(logits_at_step, labels))
+        if aux_losses:
+            loss = loss + float(step_supervision_weight) * torch.stack(aux_losses).mean()
     return loss, logits
 
 
@@ -1325,6 +1347,8 @@ def train_one_epoch(
     class_counts: torch.Tensor | None = None,
     classifier_cbr_weight: float = 0.0,
     classifier_cbr_power: float = 1.0,
+    step_supervision_weight: float = 0.0,
+    step_supervision_steps: tuple[int, ...] = (),
     grad_accum_steps: int = 1,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
     sam_rho: float = 0.0,
@@ -1366,6 +1390,8 @@ def train_one_epoch(
             class_counts=class_counts,
             classifier_cbr_weight=classifier_cbr_weight,
             classifier_cbr_power=classifier_cbr_power,
+            step_supervision_weight=step_supervision_weight,
+            step_supervision_steps=step_supervision_steps,
         )
 
     for batch_index, batch in enumerate(loader):
@@ -1698,6 +1724,21 @@ def main() -> int:
             f"[cbr] classifier regularization weight={float(args.classifier_cbr_weight):.4f} "
             f"power={float(args.classifier_cbr_power):.4f} starts at epoch {int(args.classifier_cbr_start_epoch)}"
         )
+    step_supervision_steps = tuple(
+        int(part.strip())
+        for part in str(args.step_supervision_steps).split(",")
+        if part.strip()
+    )
+    if float(args.step_supervision_weight) > 0:
+        if not step_supervision_steps:
+            raise ValueError("--step-supervision-weight > 0 requires --step-supervision-steps")
+        for step in step_supervision_steps:
+            if step < 1 or step > int(args.steps):
+                raise ValueError("--step-supervision-steps entries must be between 1 and --steps")
+        print(
+            f"[step_supervision] weight={float(args.step_supervision_weight):.4f} "
+            f"steps={','.join(str(step) for step in step_supervision_steps)}"
+        )
 
     out_dir = Path(args.project) / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1804,6 +1845,8 @@ def main() -> int:
             class_counts=class_counts,
             classifier_cbr_weight=classifier_cbr_weight,
             classifier_cbr_power=float(args.classifier_cbr_power),
+            step_supervision_weight=float(args.step_supervision_weight),
+            step_supervision_steps=step_supervision_steps,
             grad_accum_steps=grad_accum_steps,
             scheduler=scheduler,
             sam_rho=float(args.sam_rho),
