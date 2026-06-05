@@ -524,11 +524,13 @@ class YoloCTM(nn.Module):
         )
         self.norm = nn.LayerNorm(d_model)
         self.ctm_readout = str(ctm_readout).lower()
-        if self.ctm_readout not in {"mean", "attention"}:
-            raise ValueError("ctm_readout must be one of: mean, attention")
+        if self.ctm_readout not in {"mean", "attention", "class_attention"}:
+            raise ValueError("ctm_readout must be one of: mean, attention, class_attention")
         self.halt_head = nn.Linear(d_model, 1) if self.adaptive_halt_policy == "learned" else None
         if self.ctm_readout == "attention":
             self.readout_query = nn.Parameter(torch.zeros(d_model))
+        elif self.ctm_readout == "class_attention":
+            self.class_readout_query = nn.Parameter(torch.zeros(num_classes, d_model))
         self.ctm_cls = nn.Linear(d_model, num_classes)
         if logit_bias:
             self.logit_bias = nn.Parameter(torch.zeros(num_classes, dtype=torch.float32))
@@ -750,7 +752,7 @@ class YoloCTM(nn.Module):
         clean_yolo_logits = self._as_logits(self.yolo_head(feats)) if needs_clean_branch else None
         fused_feats = self._apply_feature_adapter(feats, state)
         yolo_logits = self._as_logits(self.yolo_head(fused_feats))
-        ctm_logits = self.ctm_cls(pooled)
+        ctm_logits = self._ctm_logits_from_state(state, pooled)
         if self.logprob_fusion_enabled:
             ctm_weight = torch.sigmoid(self.logprob_fusion_logit)
             yolo_log_probs = F.log_softmax(yolo_logits, dim=1)
@@ -784,10 +786,25 @@ class YoloCTM(nn.Module):
     def _pool_ctm_state(self, state: torch.Tensor) -> torch.Tensor:
         if self.ctm_readout == "mean":
             return state.mean(dim=1)
+        if self.ctm_readout == "class_attention":
+            # Generic pooled representation for auxiliary heads; class logits use per-class pooling below.
+            return state.mean(dim=1)
         query = self.readout_query.view(1, 1, -1)
         scores = (state * query).sum(dim=-1) / float(state.shape[-1]) ** 0.5
         weights = torch.softmax(scores, dim=1).unsqueeze(-1)
         return (state * weights).sum(dim=1)
+
+    def _ctm_logits_from_state(self, state: torch.Tensor, pooled: torch.Tensor) -> torch.Tensor:
+        if self.ctm_readout != "class_attention":
+            return self.ctm_cls(pooled)
+        query = self.class_readout_query.t().unsqueeze(0)
+        scores = torch.matmul(state, query) / float(state.shape[-1]) ** 0.5
+        weights = torch.softmax(scores, dim=1)
+        class_pooled = torch.einsum("bnc,bnd->bcd", weights, state)
+        logits = (class_pooled * self.ctm_cls.weight.unsqueeze(0)).sum(dim=-1)
+        if self.ctm_cls.bias is not None:
+            logits = logits + self.ctm_cls.bias.view(1, -1)
+        return logits
 
     @staticmethod
     def _polar_coordinates(height: int, width: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
@@ -1006,7 +1023,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--topology-ring-bins", type=int, default=4)
     parser.add_argument("--topology-sector-bins", type=int, default=8)
     parser.add_argument("--topology-hidden-mult", type=float, default=1.5)
-    parser.add_argument("--ctm-readout", choices=["mean", "attention"], default="mean")
+    parser.add_argument("--ctm-readout", choices=["mean", "attention", "class_attention"], default="mean")
     parser.add_argument("--adaptive-steps", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--adaptive-min-steps", type=int, default=2)
     parser.add_argument("--adaptive-confidence-threshold", type=float, default=0.9)
