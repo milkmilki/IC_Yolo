@@ -312,3 +312,9 @@ Keep it short and operational.
    - For the current CTM adapter, `tau=0.4` was selected on validation and improved test macro F1 from `0.87726` to `0.89835`.
    - Log calibrated evaluations as separate AutoResearch runs so raw and calibrated metrics stay auditable.
 9. For iterative model search after 2026-05-27, use validation-only screening with predeclared calibration settings; do not generate or consume test metrics until a milestone candidate is promoted.
+- Step-conditioned deep supervision result on 2026-06-05:
+  - ran `AutoResearch/configs/wm811k_autoresearch_stepcond_deepsup.yaml` as `autoresearch_yoloctm_nodistill_stepcond_deepsup_tau04_e10_20260605_120633`.
+  - protocol: no distillation, validation-only screening, `test.enabled: false`, fixed 10 epochs, `tau=0.4`, step-conditioned adaptive CTM with auxiliary CE on step 4 and step 6 logits (`step_supervision_weight=0.1`).
+  - result: discard, params `10.526M`, val acc `0.980381`, macro P/R/F1 `0.898773 / 0.892177 / 0.894212`; no test metrics generated.
+  - best epoch in training history was epoch `8` with val macro F1 `0.894581`, still far below the current eligible no-distill threshold `0.910745916167499`.
+  - interpretation: hard deep supervision on both the minimum and maximum thought states destabilized the useful step-conditioned CTM trajectory instead of improving adaptive-depth decisions. The next adaptive-depth run should prefer learned halting or a softer budget/consistency objective over forcing intermediate and final states to share the same classification target.

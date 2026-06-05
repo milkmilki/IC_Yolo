@@ -394,3 +394,26 @@ learned_halt_confidence_threshold: 0.90
 训练目标：每个 thought step 都可产生 logits；若该步预测正确且最大 softmax 置信度超过 `0.90`，halt target 为 1，否则为 0。推理时不再用 raw softmax threshold 决定是否继续，而用 CTM state 上的 halt head 输出决定样本是否需要更多 thought steps。
 
 注意：这条候选应排在 `stepcond_deepsup` 之后运行，避免把 deep supervision 和 learned halting 的因果证据混在一起。
+## 2026-06-05 补充：Step-Conditioned CTM + Deep Supervision 结果
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_deepsup_tau04_e10_20260605_120633
+status: discard
+params: 10.526M
+epochs: 10
+val acc: 0.980381
+val macro P/R/F1: 0.898773 / 0.892177 / 0.894212
+threshold: 0.910745916167499
+test: disabled
+```
+
+训练历史中最好的一次是 epoch 8：
+
+```text
+best_val_acc: 0.980419
+best_val_macro_f1: 0.894581
+val_adaptive_avg_steps: 4.178
+val_adaptive_max_step_fraction: 0.0888
+```
+
+解释：把 step 4 和 step 6 logits 都直接压到同一个分类目标，并没有让“多想几步”产生更强的决策修正，反而显著低于当前 step-conditioned adaptive CTM best `0.910746`。这说明前一轮 keep 的收益更像来自 step-conditioned 训练出的状态轨迹，而不是来自每个 thought state 都能独立承担最终分类任务。下一步不应继续提高 deep-supervision 权重或扫描 step 组合；更合理的是保留 step-conditioned transition，改用 learned halting 或预算正则，让模型学习“何时继续思考”，而不是强制所有中间态都像最终态一样分类。
