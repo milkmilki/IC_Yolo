@@ -514,6 +514,8 @@ class YoloCTM(nn.Module):
         self.last_adaptive_steps_used: torch.Tensor | None = None
         self.last_step_logits: dict[int, torch.Tensor] = {}
         self.last_step_halt_logits: dict[int, torch.Tensor] = {}
+        self.last_readout_weights: torch.Tensor | None = None
+        self.last_class_readout_weights: torch.Tensor | None = None
         self.step_conditioning = str(step_conditioning).lower()
         if self.step_conditioning not in {"none", "input_add"}:
             raise ValueError("step_conditioning must be one of: none, input_add")
@@ -785,21 +787,28 @@ class YoloCTM(nn.Module):
 
     def _pool_ctm_state(self, state: torch.Tensor) -> torch.Tensor:
         if self.ctm_readout == "mean":
+            self.last_readout_weights = None
+            self.last_class_readout_weights = None
             return state.mean(dim=1)
         if self.ctm_readout == "class_attention":
             # Generic pooled representation for auxiliary heads; class logits use per-class pooling below.
+            self.last_readout_weights = None
             return state.mean(dim=1)
         query = self.readout_query.view(1, 1, -1)
         scores = (state * query).sum(dim=-1) / float(state.shape[-1]) ** 0.5
         weights = torch.softmax(scores, dim=1).unsqueeze(-1)
+        self.last_readout_weights = weights.squeeze(-1).detach()
+        self.last_class_readout_weights = None
         return (state * weights).sum(dim=1)
 
     def _ctm_logits_from_state(self, state: torch.Tensor, pooled: torch.Tensor) -> torch.Tensor:
         if self.ctm_readout != "class_attention":
+            self.last_class_readout_weights = None
             return self.ctm_cls(pooled)
         query = self.class_readout_query.t().unsqueeze(0)
         scores = torch.matmul(state, query) / float(state.shape[-1]) ** 0.5
         weights = torch.softmax(scores, dim=1)
+        self.last_class_readout_weights = weights.detach()
         class_pooled = torch.einsum("bnc,bnd->bcd", weights, state)
         logits = (class_pooled * self.ctm_cls.weight.unsqueeze(0)).sum(dim=-1)
         if self.ctm_cls.bias is not None:
