@@ -750,7 +750,9 @@ def compute_classification_metrics(
 
 def copy_config(config_path: Path, run_dir: Path, config: dict[str, Any]) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(config_path, run_dir / "config.yaml")
+    target_config = run_dir / "config.yaml"
+    if config_path.resolve() != target_config.resolve():
+        shutil.copy2(config_path, target_config)
     resolved = json.dumps(config, indent=2, ensure_ascii=False)
     (run_dir / "resolved_config.json").write_text(resolved, encoding="utf-8")
 

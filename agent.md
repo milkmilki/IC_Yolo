@@ -337,3 +337,10 @@ Keep it short and operational.
   - result: discard, params `10.526M`, val acc `0.981190`, macro P/R/F1 `0.899901 / 0.899937 / 0.899247`; no test metrics generated.
   - best epoch was epoch `8` with the same val macro F1 `0.899247`, below the current eligible no-distill threshold `0.910745916167499`.
   - interpretation: even soft step-logit consistency suppresses the useful step-conditioned trajectory. Together with hard deep supervision and learned halting, this suggests the current best should be left unconstrained across steps; future candidates should avoid additional step-logit losses and instead focus on readout-side ideas, diagnostic trajectory analysis, or external-data robustness once an external wafer benchmark is prepared.
+- Attention-readout run reliability note on 2026-06-05:
+  - candidate `autoresearch_yoloctm_nodistill_stepcond_attention_readout_tau04_e10_20260605_220639` was launched from `AutoResearch/configs/wm811k_autoresearch_stepcond_attention_readout.yaml` after GPU looked idle; it keeps the best step-conditioned residual CTM and changes only the CTM readout from mean to attention.
+  - the initial foreground SSH session ended before completion, leaving `last_yoloctm.pt` and `best_yoloctm.pt` in the run directory with no AutoResearch JSON yet.
+  - resume from `last_yoloctm.pt` later hit an SSH reset while epoch `3` was in progress; `pipeline.log` stopped around epoch `3` batch `5200/7567`.
+  - confirmed machine reboot count for this candidate so far: `1`.
+  - confirmed reboot/boot time: `2026-06-05 22:49:14 +08:00`; `wmic os get lastbootuptime` returned `20260605224914.500000+480`.
+  - pipeline resume using the run-local `config.yaml` exposed a `SameFileError` when copying config into the same run directory; `copy_config` now skips `shutil.copy2` when source and target resolve to the same file, while still writing `resolved_config.json`.
