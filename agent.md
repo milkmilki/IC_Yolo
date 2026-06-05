@@ -318,3 +318,9 @@ Keep it short and operational.
   - result: discard, params `10.526M`, val acc `0.980381`, macro P/R/F1 `0.898773 / 0.892177 / 0.894212`; no test metrics generated.
   - best epoch in training history was epoch `8` with val macro F1 `0.894581`, still far below the current eligible no-distill threshold `0.910745916167499`.
   - interpretation: hard deep supervision on both the minimum and maximum thought states destabilized the useful step-conditioned CTM trajectory instead of improving adaptive-depth decisions. The next adaptive-depth run should prefer learned halting or a softer budget/consistency objective over forcing intermediate and final states to share the same classification target.
+- Step-conditioned learned-halting result on 2026-06-05:
+  - ran `AutoResearch/configs/wm811k_autoresearch_stepcond_learnedhalt.yaml` as `autoresearch_yoloctm_nodistill_stepcond_learnedhalt_tau04_e10_20260605_132330`.
+  - protocol: no distillation, validation-only screening, `test.enabled: false`, fixed 10 epochs, `tau=0.4`, step-conditioned adaptive CTM with a learned halt head (`learned_halt_loss_weight=0.05`, target confidence `0.90`).
+  - result: discard, params `10.526M`, val acc `0.980496`, macro P/R/F1 `0.902789 / 0.903502 / 0.902525`; no test metrics generated.
+  - best epoch in training history was epoch `8` with val macro F1 `0.902607`, still below the current eligible no-distill threshold `0.910745916167499`.
+  - interpretation: the learned halt head did not preserve the step-conditioned adaptive CTM gain. It is better than hard deep supervision but falls back near the older OneCycle regime, so the next promising direction is not more halting supervision; use the kept step-conditioned model as the architectural base and add a softer trajectory-level regularizer or topology-aware readout that does not force step states or halt labels.

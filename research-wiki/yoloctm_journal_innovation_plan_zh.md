@@ -417,3 +417,26 @@ val_adaptive_max_step_fraction: 0.0888
 ```
 
 解释：把 step 4 和 step 6 logits 都直接压到同一个分类目标，并没有让“多想几步”产生更强的决策修正，反而显著低于当前 step-conditioned adaptive CTM best `0.910746`。这说明前一轮 keep 的收益更像来自 step-conditioned 训练出的状态轨迹，而不是来自每个 thought state 都能独立承担最终分类任务。下一步不应继续提高 deep-supervision 权重或扫描 step 组合；更合理的是保留 step-conditioned transition，改用 learned halting 或预算正则，让模型学习“何时继续思考”，而不是强制所有中间态都像最终态一样分类。
+## 2026-06-05 补充：Step-Conditioned CTM + Learned Halting 结果
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_learnedhalt_tau04_e10_20260605_132330
+status: discard
+params: 10.526M
+epochs: 10
+val acc: 0.980496
+val macro P/R/F1: 0.902789 / 0.903502 / 0.902525
+threshold: 0.910745916167499
+test: disabled
+```
+
+训练历史中最好的一次是 epoch 8：
+
+```text
+best_val_acc: 0.980535
+best_val_macro_f1: 0.902607
+val_adaptive_avg_steps: 4.164
+val_adaptive_max_step_fraction: 0.0818
+```
+
+解释：learned-halting 比 hard deep supervision 更稳，但没有保住 step-conditioned adaptive CTM 的 `0.910746` 收益。它的表现更接近旧的 OneCycle/非蒸馏基线，说明“学会停不停”本身不是当前瓶颈；更可能的关键仍是 step-conditioned transition 改善了 CTM 状态轨迹。下一步应避免继续加强 halt label 或 deep supervision，改为在 kept step-conditioned 架构上加入更软的 trajectory-level regularizer、拓扑 readout，或类边界友好的轻量一致性目标。
