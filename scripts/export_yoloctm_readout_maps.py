@@ -43,6 +43,14 @@ def infer_grid(token_count: int) -> tuple[int, int]:
     return 1, token_count
 
 
+def polar_coordinates(height: int, width: int) -> np.ndarray:
+    y = np.linspace(-1.0, 1.0, num=height, dtype=np.float32)
+    x = np.linspace(-1.0, 1.0, num=width, dtype=np.float32)
+    yy, xx = np.meshgrid(y, x, indexing="ij")
+    radius = np.sqrt(np.square(xx) + np.square(yy)) / np.sqrt(np.float32(2.0))
+    return np.stack([xx, yy, radius], axis=-1).reshape(-1, 3).astype(np.float32)
+
+
 def main() -> int:
     args = parse_args()
     if str(args.split).lower() == "test":
@@ -63,6 +71,13 @@ def main() -> int:
     if dataset.classes != checkpoint_classes:
         raise ValueError(f"Dataset classes do not match checkpoint classes: {dataset.classes} != {checkpoint_classes}")
     model.eval()
+    model_readout = str(getattr(model, "ctm_readout", "unknown"))
+    polar_params = getattr(model, "class_readout_polar", None)
+    polar_params_np = (
+        polar_params.detach().cpu().numpy().astype(np.float32)
+        if polar_params is not None
+        else None
+    )
 
     log_prior = None
     if float(args.prior_logit_tau) != 0.0:
@@ -92,7 +107,7 @@ def main() -> int:
             shared_weights = getattr(model, "last_readout_weights", None)
             if class_weights is not None:
                 weights_np = class_weights.detach().cpu().numpy().astype(np.float32)
-                readout_kind = "class_attention"
+                readout_kind = "class_attention_polar" if model_readout == "class_attention_polar" else "class_attention"
                 token_count = int(weights_np.shape[1])
                 grid_h, grid_w = infer_grid(token_count)
             elif shared_weights is not None:
@@ -119,6 +134,14 @@ def main() -> int:
                         weight_file,
                         class_readout_weights=weights_np[offset],
                         grid_shape=np.array([grid_h, grid_w], dtype=np.int16),
+                    )
+                elif readout_kind == "class_attention_polar":
+                    np.savez_compressed(
+                        weight_file,
+                        class_readout_weights=weights_np[offset],
+                        grid_shape=np.array([grid_h, grid_w], dtype=np.int16),
+                        polar_coordinates=polar_coordinates(grid_h, grid_w),
+                        class_readout_polar=polar_params_np,
                     )
                 elif readout_kind == "attention":
                     np.savez_compressed(
@@ -154,6 +177,7 @@ def main() -> int:
         "data_root": str(args.data_root),
         "split": str(args.split),
         "classes": dataset.classes,
+        "model_readout": model_readout,
         "prior_logit_tau": float(args.prior_logit_tau),
         "exported_samples": exported,
         "note": "Validation-only CTM readout evidence export; test split is intentionally rejected.",
