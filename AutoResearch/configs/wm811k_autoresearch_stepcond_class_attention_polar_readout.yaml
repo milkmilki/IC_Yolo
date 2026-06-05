@@ -1,0 +1,117 @@
+dataset:
+  source: data/MIR-WM811K
+  output: data/wm811k_cls
+  image_size: 224
+  ratios: [70, 15, 15]
+  include_none: true
+  seed: 42
+  overwrite: false
+
+prepare:
+  enabled: false
+
+model:
+  algorithm: yoloctm
+  config: null
+  weights: yolo26m-cls.pt
+  pretrained: true
+  ctm:
+    d_model: 96
+    steps: 6
+    adaptive_steps: true
+    adaptive_min_steps: 4
+    adaptive_confidence_threshold: 0.90
+    step_conditioning: input_add
+    dropout: 0.1
+    class_weight_power: 0.5
+    adapter_rank: 0
+    feature_adapter: true
+    feature_fusion: residual
+    gate_rank: 16
+    token_gate_rank: 16
+    logit_bias: false
+    logit_bias_init: zero
+    logit_bias_prior_tau: 0.4
+    anchor_loss_weight: 0.0
+    distill_logprobs: null
+    distill_weight: 0.0
+    distill_temperature: 2.0
+    distill_mode: full
+    prototype_bcl_weight: 0.0
+    prototype_bcl_temperature: 0.1
+    classifier_cbr_weight: 0.0
+    classifier_cbr_power: 1.0
+    classifier_cbr_start_epoch: 1
+    step_supervision_weight: 0.0
+    step_supervision_steps: []
+    step_consistency_weight: 0.0
+    step_consistency_steps: []
+    step_consistency_temperature: 1.0
+    learned_halt_loss_weight: 0.0
+    learned_halt_confidence_threshold: 0.9
+    loss: weighted_ce
+    label_smoothing: 0.0
+    ldam_max_margin: 0.2
+    ldam_start_epoch: 7
+    logprob_fusion: false
+    logprob_fusion_init: 0.2
+    expert_fusion: none
+    expert_ctm_init: 0.4
+    freeze_yolo_anchor: false
+    spatial_encoding: none
+    spatial_encoding_scale_init: 0.05
+    token_mixer: none
+    scan_scale_init: 0.05
+    topology_ring_bins: 4
+    topology_sector_bins: 8
+    topology_hidden_mult: 1.5
+    readout: class_attention_polar
+
+train:
+  epochs: 10
+  imgsz: 224
+  batch: 64
+  micro_batch: 16
+  lr: 0.00125
+  lr_schedule: onecycle
+  onecycle_pct_start: 0.3
+  onecycle_div_factor: 10.0
+  onecycle_final_div_factor: 1000.0
+  optimizer: adamw
+  weight_decay: 0.0001
+  sam_rho: 0.0
+  sam_adaptive: false
+  selection_prior_logit_tau: 0.4
+  ema_decay: 0.999
+  device: 0
+  workers: 0
+  progress_batches: 100
+  sampling: natural
+  none_sampling_ratio: 0.75
+  sampling_start_epoch: 1
+  patience: 20
+  project: runs/classify
+  name: autoresearch_yoloctm_nodistill_stepcond_class_attention_polar_readout_tau04_e10
+  add_timestamp: true
+  exist_ok: true
+
+validate:
+  enabled: true
+  split: val
+
+test:
+  enabled: false
+  split: test
+
+metrics:
+  enabled: true
+  splits: [val]
+  batch: 128
+  prior_logit_tau: 0.4
+
+logging:
+  filename: pipeline.log
+  autoresearch: true
+  status: auto
+  keep_val_macro_f1_min: 0.910745916167499
+  description: "Deep non-distilled candidate: keep the best step-conditioned residual CTM dynamics and use class-specific CTM readout with a zero-initialized polar coordinate bias, targeting Loc/Edge-Loc spatial localization without step-logit losses or test access; validation-only screening."

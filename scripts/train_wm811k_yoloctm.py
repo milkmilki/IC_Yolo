@@ -516,6 +516,7 @@ class YoloCTM(nn.Module):
         self.last_step_halt_logits: dict[int, torch.Tensor] = {}
         self.last_readout_weights: torch.Tensor | None = None
         self.last_class_readout_weights: torch.Tensor | None = None
+        self.last_token_hw: tuple[int, int] | None = None
         self.step_conditioning = str(step_conditioning).lower()
         if self.step_conditioning not in {"none", "input_add"}:
             raise ValueError("step_conditioning must be one of: none, input_add")
@@ -526,13 +527,15 @@ class YoloCTM(nn.Module):
         )
         self.norm = nn.LayerNorm(d_model)
         self.ctm_readout = str(ctm_readout).lower()
-        if self.ctm_readout not in {"mean", "attention", "class_attention"}:
-            raise ValueError("ctm_readout must be one of: mean, attention, class_attention")
+        if self.ctm_readout not in {"mean", "attention", "class_attention", "class_attention_polar"}:
+            raise ValueError("ctm_readout must be one of: mean, attention, class_attention, class_attention_polar")
         self.halt_head = nn.Linear(d_model, 1) if self.adaptive_halt_policy == "learned" else None
         if self.ctm_readout == "attention":
             self.readout_query = nn.Parameter(torch.zeros(d_model))
-        elif self.ctm_readout == "class_attention":
+        elif self.ctm_readout in {"class_attention", "class_attention_polar"}:
             self.class_readout_query = nn.Parameter(torch.zeros(num_classes, d_model))
+            if self.ctm_readout == "class_attention_polar":
+                self.class_readout_polar = nn.Parameter(torch.zeros(num_classes, 3))
         self.ctm_cls = nn.Linear(d_model, num_classes)
         if logit_bias:
             self.logit_bias = nn.Parameter(torch.zeros(num_classes, dtype=torch.float32))
@@ -628,8 +631,10 @@ class YoloCTM(nn.Module):
         feats = self.backbone(images)
         if feats.ndim == 2:
             tokens = feats.unsqueeze(1)
+            self.last_token_hw = None
         else:
             tokens = feats.flatten(2).transpose(1, 2)
+            self.last_token_hw = (int(feats.shape[-2]), int(feats.shape[-1]))
 
         inputs = self.token_proj(tokens)
         if self.spatial_encoding == "polar" and feats.ndim == 4:
@@ -790,7 +795,7 @@ class YoloCTM(nn.Module):
             self.last_readout_weights = None
             self.last_class_readout_weights = None
             return state.mean(dim=1)
-        if self.ctm_readout == "class_attention":
+        if self.ctm_readout in {"class_attention", "class_attention_polar"}:
             # Generic pooled representation for auxiliary heads; class logits use per-class pooling below.
             self.last_readout_weights = None
             return state.mean(dim=1)
@@ -802,11 +807,19 @@ class YoloCTM(nn.Module):
         return (state * weights).sum(dim=1)
 
     def _ctm_logits_from_state(self, state: torch.Tensor, pooled: torch.Tensor) -> torch.Tensor:
-        if self.ctm_readout != "class_attention":
+        if self.ctm_readout not in {"class_attention", "class_attention_polar"}:
             self.last_class_readout_weights = None
             return self.ctm_cls(pooled)
         query = self.class_readout_query.t().unsqueeze(0)
         scores = torch.matmul(state, query) / float(state.shape[-1]) ** 0.5
+        if self.ctm_readout == "class_attention_polar":
+            if self.last_token_hw is None:
+                raise RuntimeError("class_attention_polar readout requires spatial feature tokens")
+            height, width = self.last_token_hw
+            coords = self._polar_coordinates(height, width, state.device, state.dtype)
+            if coords.shape[0] != state.shape[1]:
+                raise RuntimeError("Polar readout coordinate count does not match CTM token count")
+            scores = scores + torch.matmul(coords, self.class_readout_polar.t()).unsqueeze(0)
         weights = torch.softmax(scores, dim=1)
         self.last_class_readout_weights = weights.detach()
         class_pooled = torch.einsum("bnc,bnd->bcd", weights, state)
@@ -1032,7 +1045,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--topology-ring-bins", type=int, default=4)
     parser.add_argument("--topology-sector-bins", type=int, default=8)
     parser.add_argument("--topology-hidden-mult", type=float, default=1.5)
-    parser.add_argument("--ctm-readout", choices=["mean", "attention", "class_attention"], default="mean")
+    parser.add_argument(
+        "--ctm-readout",
+        choices=["mean", "attention", "class_attention", "class_attention_polar"],
+        default="mean",
+    )
     parser.add_argument("--adaptive-steps", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--adaptive-min-steps", type=int, default=2)
     parser.add_argument("--adaptive-confidence-threshold", type=float, default=0.9)
