@@ -1,0 +1,2 @@
+recorded_at_local	candidate	reboot_index_for_candidate	boot_time_local	wmic_lastbootuptime	evidence	notes
+2026-06-06 00:55:58 +08:00	autoresearch_yoloctm_nodistill_stepcond_attention_readout_tau04_e10_20260605_220639	1	2026-06-05 22:49:14 +08:00	20260605224914.500000+480	wmic os get lastbootuptime after SSH reset	pipeline.log stopped during epoch 3 around batch 5200/7567; run should resume from last_yoloctm.pt
