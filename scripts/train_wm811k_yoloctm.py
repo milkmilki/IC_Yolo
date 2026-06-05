@@ -1042,6 +1042,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--classifier-cbr-start-epoch", type=int, default=1)
     parser.add_argument("--step-supervision-weight", type=float, default=0.0)
     parser.add_argument("--step-supervision-steps", default="")
+    parser.add_argument("--step-consistency-weight", type=float, default=0.0)
+    parser.add_argument("--step-consistency-steps", default="")
+    parser.add_argument("--step-consistency-temperature", type=float, default=1.0)
     parser.add_argument("--learned-halt-loss-weight", type=float, default=0.0)
     parser.add_argument("--learned-halt-confidence-threshold", type=float, default=0.9)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax", "ldam_drw"], default="weighted_ce")
@@ -1292,6 +1295,9 @@ def compute_train_loss_and_logits(
     classifier_cbr_power: float = 1.0,
     step_supervision_weight: float = 0.0,
     step_supervision_steps: tuple[int, ...] = (),
+    step_consistency_weight: float = 0.0,
+    step_consistency_steps: tuple[int, ...] = (),
+    step_consistency_temperature: float = 1.0,
     learned_halt_loss_weight: float = 0.0,
     learned_halt_confidence_threshold: float = 0.9,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -1355,6 +1361,21 @@ def compute_train_loss_and_logits(
                 aux_losses.append(criterion(logits_at_step, labels))
         if aux_losses:
             loss = loss + float(step_supervision_weight) * torch.stack(aux_losses).mean()
+    if step_consistency_weight > 0 and step_consistency_steps:
+        step_logits = getattr(model, "last_step_logits", {})
+        temperature = max(float(step_consistency_temperature), 1e-6)
+        with torch.no_grad():
+            target_probs = torch.softmax(logits.detach() / temperature, dim=1)
+        consistency_losses: list[torch.Tensor] = []
+        for step in step_consistency_steps:
+            logits_at_step = step_logits.get(int(step))
+            if logits_at_step is not None:
+                log_probs = F.log_softmax(logits_at_step / temperature, dim=1)
+                consistency_losses.append(
+                    F.kl_div(log_probs, target_probs, reduction="batchmean") * (temperature**2)
+                )
+        if consistency_losses:
+            loss = loss + float(step_consistency_weight) * torch.stack(consistency_losses).mean()
     if learned_halt_loss_weight > 0:
         step_logits = getattr(model, "last_step_logits", {})
         step_halt_logits = getattr(model, "last_step_halt_logits", {})
@@ -1394,6 +1415,9 @@ def train_one_epoch(
     classifier_cbr_power: float = 1.0,
     step_supervision_weight: float = 0.0,
     step_supervision_steps: tuple[int, ...] = (),
+    step_consistency_weight: float = 0.0,
+    step_consistency_steps: tuple[int, ...] = (),
+    step_consistency_temperature: float = 1.0,
     learned_halt_loss_weight: float = 0.0,
     learned_halt_confidence_threshold: float = 0.9,
     grad_accum_steps: int = 1,
@@ -1439,6 +1463,9 @@ def train_one_epoch(
             classifier_cbr_power=classifier_cbr_power,
             step_supervision_weight=step_supervision_weight,
             step_supervision_steps=step_supervision_steps,
+            step_consistency_weight=step_consistency_weight,
+            step_consistency_steps=step_consistency_steps,
+            step_consistency_temperature=step_consistency_temperature,
             learned_halt_loss_weight=learned_halt_loss_weight,
             learned_halt_confidence_threshold=learned_halt_confidence_threshold,
         )
@@ -1790,6 +1817,24 @@ def main() -> int:
             f"[step_supervision] weight={float(args.step_supervision_weight):.4f} "
             f"steps={','.join(str(step) for step in step_supervision_steps)}"
         )
+    step_consistency_steps = tuple(
+        int(part.strip())
+        for part in str(args.step_consistency_steps).split(",")
+        if part.strip()
+    )
+    if float(args.step_consistency_weight) > 0:
+        if not step_consistency_steps:
+            raise ValueError("--step-consistency-weight > 0 requires --step-consistency-steps")
+        for step in step_consistency_steps:
+            if step < 1 or step > int(args.steps):
+                raise ValueError("--step-consistency-steps entries must be between 1 and --steps")
+        if float(args.step_consistency_temperature) <= 0:
+            raise ValueError("--step-consistency-temperature must be positive")
+        print(
+            f"[step_consistency] weight={float(args.step_consistency_weight):.4f} "
+            f"steps={','.join(str(step) for step in step_consistency_steps)} "
+            f"temperature={float(args.step_consistency_temperature):.4f}"
+        )
     if str(args.adaptive_halt_policy) == "learned":
         if float(args.learned_halt_loss_weight) <= 0:
             raise ValueError("learned halt policy requires --learned-halt-loss-weight > 0")
@@ -1906,6 +1951,9 @@ def main() -> int:
             classifier_cbr_power=float(args.classifier_cbr_power),
             step_supervision_weight=float(args.step_supervision_weight),
             step_supervision_steps=step_supervision_steps,
+            step_consistency_weight=float(args.step_consistency_weight),
+            step_consistency_steps=step_consistency_steps,
+            step_consistency_temperature=float(args.step_consistency_temperature),
             learned_halt_loss_weight=float(args.learned_halt_loss_weight),
             learned_halt_confidence_threshold=float(args.learned_halt_confidence_threshold),
             grad_accum_steps=grad_accum_steps,
