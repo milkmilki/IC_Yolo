@@ -440,3 +440,27 @@ val_adaptive_max_step_fraction: 0.0818
 ```
 
 解释：learned-halting 比 hard deep supervision 更稳，但没有保住 step-conditioned adaptive CTM 的 `0.910746` 收益。它的表现更接近旧的 OneCycle/非蒸馏基线，说明“学会停不停”本身不是当前瓶颈；更可能的关键仍是 step-conditioned transition 改善了 CTM 状态轨迹。下一步应避免继续加强 halt label 或 deep supervision，改为在 kept step-conditioned 架构上加入更软的 trajectory-level regularizer、拓扑 readout，或类边界友好的轻量一致性目标。
+## 2026-06-05 补充：Step-Conditioned CTM + Topology Gate 结果
+
+```text
+config: AutoResearch/configs/wm811k_autoresearch_stepcond_topology_gate.yaml
+run: autoresearch_yoloctm_nodistill_stepcond_topology_gate_tau04_e10_20260605_143519
+status: discard
+params: 10.597M
+epochs: 10
+val acc: 0.979841
+val macro P/R/F1: 0.902460 / 0.898966 / 0.899680
+threshold: 0.910745916167499
+test: disabled
+```
+
+训练历史中最好的一次是 epoch 8：
+
+```text
+best_val_acc: 0.979841
+best_val_macro_f1: 0.899680
+val_adaptive_avg_steps: 4.183
+val_adaptive_max_step_fraction: 0.0917
+```
+
+解释：这条候选从当前 kept `stepcond_adaptive` 出发，只把 `feature_fusion` 从 `residual` 改成 `topology_gate`，希望 wafer ring/sector context 控制 CTM residual 注入 YOLO feature 的位置。但结果明显低于 `0.910746`，说明 topology gate 与 step-conditioned CTM trajectory 不好组合。直接在 YOLO feature 注入点做拓扑门控太硬，会破坏已学到的状态轨迹；下一步应回到 `feature_fusion: residual`，改测更软的 trajectory-level regularizer、readout-side auxiliary signal，或只在 validation 诊断中分析 trajectory，而不是继续叠加 topology gate。
