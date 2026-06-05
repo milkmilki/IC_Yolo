@@ -464,3 +464,27 @@ val_adaptive_max_step_fraction: 0.0917
 ```
 
 解释：这条候选从当前 kept `stepcond_adaptive` 出发，只把 `feature_fusion` 从 `residual` 改成 `topology_gate`，希望 wafer ring/sector context 控制 CTM residual 注入 YOLO feature 的位置。但结果明显低于 `0.910746`，说明 topology gate 与 step-conditioned CTM trajectory 不好组合。直接在 YOLO feature 注入点做拓扑门控太硬，会破坏已学到的状态轨迹；下一步应回到 `feature_fusion: residual`，改测更软的 trajectory-level regularizer、readout-side auxiliary signal，或只在 validation 诊断中分析 trajectory，而不是继续叠加 topology gate。
+## 2026-06-05 补充：Step-Conditioned CTM + Soft Step Consistency 结果
+
+```text
+config: AutoResearch/configs/wm811k_autoresearch_stepcond_consistency.yaml
+run: autoresearch_yoloctm_nodistill_stepcond_consistency_tau04_e10_20260605_160136
+status: discard
+params: 10.526M
+epochs: 10
+val acc: 0.981190
+val macro P/R/F1: 0.899901 / 0.899937 / 0.899247
+threshold: 0.910745916167499
+test: disabled
+```
+
+训练历史中最好的一次是 epoch 8：
+
+```text
+best_val_acc: 0.981190
+best_val_macro_f1: 0.899247
+val_adaptive_avg_steps: 4.178
+val_adaptive_max_step_fraction: 0.0888
+```
+
+解释：这条候选没有使用外部教师，也没有增加推理参数，只让 step 4 logits 以 KL 形式软匹配最终 logits 的 stop-gradient 分布，希望比 hard deep supervision 更温和地平滑 thought trajectory。但结果仍明显低于 `stepcond_adaptive` 的 `0.910746`。这说明当前最有价值的不是让每一步 logits 对齐，而是保持 step-conditioned CTM 自由形成自己的状态轨迹；无论 hard label、halt label，还是 soft logit consistency，都会削弱这个轨迹。下一步应避免继续给 step logits 加训练损失，优先做 readout-side 辅助、trajectory 诊断分析，或准备外部 wafer benchmark 做稳健性验证。
