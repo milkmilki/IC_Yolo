@@ -139,7 +139,13 @@ def main() -> int:
             shared_weights = getattr(model, "last_readout_weights", None)
             if class_weights is not None:
                 weights_np = class_weights.detach().cpu().numpy().astype(np.float32)
-                readout_kind = "class_attention_polar" if model_readout == "class_attention_polar" else "class_attention"
+                readout_kind = (
+                    "class_attention_polar"
+                    if model_readout == "class_attention_polar"
+                    else "class_attention_blend"
+                    if model_readout == "class_attention_blend"
+                    else "class_attention"
+                )
                 token_count = int(weights_np.shape[1])
                 grid_h, grid_w = infer_grid(token_count)
             elif shared_weights is not None:
@@ -161,7 +167,7 @@ def main() -> int:
                 path, _target = dataset.samples[dataset_index]
                 sample_id = f"{exported:05d}"
                 weight_file = args.output_dir / f"{sample_id}_readout_weights.npz"
-                if readout_kind == "class_attention":
+                if readout_kind in {"class_attention", "class_attention_blend"}:
                     np.savez_compressed(
                         weight_file,
                         class_readout_weights=weights_np[offset],

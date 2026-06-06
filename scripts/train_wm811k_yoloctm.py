@@ -527,15 +527,20 @@ class YoloCTM(nn.Module):
         )
         self.norm = nn.LayerNorm(d_model)
         self.ctm_readout = str(ctm_readout).lower()
-        if self.ctm_readout not in {"mean", "attention", "class_attention", "class_attention_polar"}:
-            raise ValueError("ctm_readout must be one of: mean, attention, class_attention, class_attention_polar")
+        if self.ctm_readout not in {"mean", "attention", "class_attention", "class_attention_polar", "class_attention_blend"}:
+            raise ValueError(
+                "ctm_readout must be one of: mean, attention, class_attention, class_attention_polar, "
+                "class_attention_blend"
+            )
         self.halt_head = nn.Linear(d_model, 1) if self.adaptive_halt_policy == "learned" else None
         if self.ctm_readout == "attention":
             self.readout_query = nn.Parameter(torch.zeros(d_model))
-        elif self.ctm_readout in {"class_attention", "class_attention_polar"}:
+        elif self.ctm_readout in {"class_attention", "class_attention_polar", "class_attention_blend"}:
             self.class_readout_query = nn.Parameter(torch.zeros(num_classes, d_model))
             if self.ctm_readout == "class_attention_polar":
                 self.class_readout_polar = nn.Parameter(torch.zeros(num_classes, 3))
+            if self.ctm_readout == "class_attention_blend":
+                self.class_readout_blend_logit = nn.Parameter(torch.zeros(num_classes))
         self.ctm_cls = nn.Linear(d_model, num_classes)
         if logit_bias:
             self.logit_bias = nn.Parameter(torch.zeros(num_classes, dtype=torch.float32))
@@ -795,7 +800,7 @@ class YoloCTM(nn.Module):
             self.last_readout_weights = None
             self.last_class_readout_weights = None
             return state.mean(dim=1)
-        if self.ctm_readout in {"class_attention", "class_attention_polar"}:
+        if self.ctm_readout in {"class_attention", "class_attention_polar", "class_attention_blend"}:
             # Generic pooled representation for auxiliary heads; class logits use per-class pooling below.
             self.last_readout_weights = None
             return state.mean(dim=1)
@@ -807,7 +812,7 @@ class YoloCTM(nn.Module):
         return (state * weights).sum(dim=1)
 
     def _ctm_logits_from_state(self, state: torch.Tensor, pooled: torch.Tensor) -> torch.Tensor:
-        if self.ctm_readout not in {"class_attention", "class_attention_polar"}:
+        if self.ctm_readout not in {"class_attention", "class_attention_polar", "class_attention_blend"}:
             self.last_class_readout_weights = None
             return self.ctm_cls(pooled)
         query = self.class_readout_query.t().unsqueeze(0)
@@ -823,6 +828,10 @@ class YoloCTM(nn.Module):
         weights = torch.softmax(scores, dim=1)
         self.last_class_readout_weights = weights.detach()
         class_pooled = torch.einsum("bnc,bnd->bcd", weights, state)
+        if self.ctm_readout == "class_attention_blend":
+            blend = torch.sigmoid(self.class_readout_blend_logit).view(1, -1, 1)
+            mean_pooled = pooled.unsqueeze(1).expand_as(class_pooled)
+            class_pooled = blend * class_pooled + (1.0 - blend) * mean_pooled
         logits = (class_pooled * self.ctm_cls.weight.unsqueeze(0)).sum(dim=-1)
         if self.ctm_cls.bias is not None:
             logits = logits + self.ctm_cls.bias.view(1, -1)
@@ -1047,7 +1056,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--topology-hidden-mult", type=float, default=1.5)
     parser.add_argument(
         "--ctm-readout",
-        choices=["mean", "attention", "class_attention", "class_attention_polar"],
+        choices=["mean", "attention", "class_attention", "class_attention_polar", "class_attention_blend"],
         default="mean",
     )
     parser.add_argument("--adaptive-steps", action=argparse.BooleanOptionalAction, default=False)

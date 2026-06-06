@@ -396,3 +396,9 @@ Keep it short and operational.
   - added `--per-class-samples` to `scripts/export_yoloctm_readout_maps.py` and `scripts/run_yoloctm_readout_figure_pipeline.py`, then generated the balanced evidence package at `runs/diagnostics/class_attention_readout_val_figures_balanced`.
   - balanced package details: `split=val`, checkpoint `runs/classify/autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126/best_yoloctm.pt`, `per_class_samples=24`, `exported_samples=215`, selected cases cover all `9` classes, and the assembled figure is `readout_figure.png`.
   - no test metrics or test images were exported.
+- Prepared class-attention mean-blend candidate on 2026-06-06:
+  - added CTM `readout: class_attention_blend` plus `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_blend_readout.yaml`.
+  - single factor: keep the current best step-conditioned residual CTM and class-specific readout, but add one learnable gate per class to blend class-attended CTM evidence with the mean-pooled CTM feature before the class logit.
+  - rationale: validation-only class deltas show class attention improves Edge-Loc/Center/Loc but slightly hurts Scratch/Near-full/Donut. A per-class mean fallback may preserve location-sensitive gains while letting fragile classes retain stable mean evidence.
+  - protocol remains no distillation, 10 epochs, validation-only screening, `test.enabled: false`, and keep/discard threshold `0.9115232889273587`.
+  - `py_compile` and `--check-config` passed on 2026-06-06.

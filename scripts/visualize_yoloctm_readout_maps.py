@@ -107,7 +107,7 @@ def main() -> int:
     records: list[dict[str, object]] = []
     for sample in samples[: int(args.max_samples)]:
         readout_kind, weights, grid_shape = load_sample_weight(args.export_dir, sample)
-        if readout_kind in {"class_attention", "class_attention_polar"}:
+        if readout_kind in {"class_attention", "class_attention_polar", "class_attention_blend"}:
             class_items = selected_classes(sample, classes, str(args.class_mode))
         elif readout_kind == "attention":
             class_items = [(-1, "shared_attention")]
@@ -115,7 +115,7 @@ def main() -> int:
             continue
 
         for class_index, label in class_items:
-            if readout_kind in {"class_attention", "class_attention_polar"}:
+            if readout_kind in {"class_attention", "class_attention_polar", "class_attention_blend"}:
                 class_weights = weights[:, class_index]
             else:
                 class_weights = weights

@@ -604,3 +604,9 @@ test: disabled / not exported
 The ablation table confirms the current no-distillation validation-only best remains `stepcond_class_attention_readout` with macro F1 `0.9115232889273587`. The class-delta report versus `stepcond_adaptive` shows a small but positive validation gain: macro F1 `+0.0007773727598596736` and accuracy `+0.0006938020351526797`.
 
 The first readout figure export used sequential `--max-samples 256` and only selected one class because the validation folder ordering is class-major under severe WM811K imbalance. To avoid misleading figures, `export_yoloctm_readout_maps.py` and `run_yoloctm_readout_figure_pipeline.py` now support `--per-class-samples`. The balanced figure package used `--per-class-samples 24`, exported 215 validation samples, and selected cases across all 9 classes.
+
+## 2026-06-06 supplement: Next Candidate From Evidence
+
+The validation-only class delta indicates that class-specific attention readout improves Edge-Loc, Center, and Loc, while slightly reducing F1 on Scratch, Near-full, and Donut. The next single-factor candidate is therefore `class_attention_blend`: one learnable gate per class mixes class-attended CTM evidence with the original mean-pooled CTM feature before the class logit.
+
+This keeps the useful class-specific spatial evidence path but gives fragile classes a fallback to stable mean evidence. The protocol remains no-distillation, 10 epochs, validation-only screening, `test.enabled: false`, and threshold `0.9115232889273587`.
