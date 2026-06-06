@@ -562,3 +562,28 @@ val_adaptive_max_step_fraction: 0.127
 ```
 
 Interpretation: adding a zero-initialized polar coordinate bias to class-specific readout was not helpful. It raised recall pressure but lost too much precision, so the location prior is too blunt when injected directly into readout scores. The current best remains class-specific attention readout without coordinate bias. The next single-factor run is a softer readout-side idea: a small training-only normalized entropy penalty on class readout weights, intended to sharpen token evidence without step-logit losses, distillation, coordinate priors, test access, or inference-time parameter changes.
+
+## 2026-06-06 supplement: Class-Specific Attention Readout + Entropy Sharpening
+
+```text
+config: AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_entropy_readout.yaml
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_entropy_readout_tau04_e10_20260606_160948
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.982385
+val macro P/R/F1: 0.916058 / 0.908026 / 0.911523
+threshold: 0.9115232889273587
+test: disabled
+```
+
+Training history reported epoch 10 as the internal best:
+
+```text
+best_val_acc: 0.982385
+best_val_macro_f1: 0.911584
+val_adaptive_avg_steps: 4.152
+val_adaptive_max_step_fraction: 0.076
+```
+
+Interpretation: the official AutoResearch metrics use the predeclared validation prior calibration (`prior_logit_tau=0.4`) and match the existing class-attention best exactly, so this is not a protocol-valid improvement. The entropy penalty did not hurt the main validation report, but it also did not move the selected decision boundary beyond the current best. The next step should be validation-only evidence assembly around the kept class-specific attention model, not another immediate readout loss.

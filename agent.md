@@ -385,3 +385,7 @@ Keep it short and operational.
   - current keep/discard threshold remains validation macro F1 `0.9115232889273587`.
   - launched on 2026-06-06 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_entropy_readout_tau04_e10_20260606_160948` via scheduled task `WM811K_AutoResearch_ClassAttentionEntropy` after `--check-config` and `py_compile` passed.
   - current run-local recovery wrapper: `scripts/run_stepcond_class_attention_entropy_readout.cmd`.
+  - result on 2026-06-06: discard by official AutoResearch metrics, params `10.527M`, val acc `0.982385`, macro P/R/F1 `0.916058 / 0.908026 / 0.911523`; no test metrics generated.
+  - training history recorded an internal best `best_val_macro_f1=0.911584` at epoch `10`, but the official validation metrics with the predeclared `prior_logit_tau=0.4` match the existing class-attention best exactly and therefore do not clear the strict `0.9115232889273587` threshold.
+  - interpretation: entropy sharpening did not produce a protocol-valid improvement over class-specific attention readout. The current eligible no-distillation best remains `autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126`.
+  - next step: stop adding readout losses for the moment; build a validation-only evidence package around the kept class-attention model and only then decide whether another structural candidate is justified.

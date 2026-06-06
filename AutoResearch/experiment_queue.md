@@ -13,11 +13,10 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
 
 ## Active / Next Runs
 
-1. Class-specific attention entropy:
-   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_entropy_readout.yaml`
-   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_entropy_readout_tau04_e10_20260606_160948`
-   - Single factor over class attention: add a small training-only entropy minimization loss on class-specific CTM readout weights.
-   - Rationale: polar positional bias hurt validation macro F1, but class-specific readout remains the best no-distillation architecture. The next readout-side test should encourage sharper token evidence without adding step-logit losses, distillation, coordinate priors, or inference-time parameters.
+1. Validation-only evidence package for the current best:
+   - Current best checkpoint: `runs/classify/autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126/best_yoloctm.pt`
+   - Generate ablation tables, class-delta reports, and readout evidence figures from validation artifacts only.
+   - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
 
 ## Do Not Rerun
 
@@ -30,6 +29,7 @@ These 2026-06-05 candidates are already completed and recorded:
 - `stepcond_attention_readout`
 - `stepcond_class_attention_readout`
 - `stepcond_class_attention_polar_readout`
+- `stepcond_class_attention_entropy_readout`
 
 ## Evidence Package Commands
 
