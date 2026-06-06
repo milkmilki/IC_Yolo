@@ -346,9 +346,12 @@ Keep it short and operational.
   - confirmed reboot/boot time #1: `2026-06-05 22:49:14 +08:00`; `wmic os get lastbootuptime` returned `20260605224914.500000+480`.
   - confirmed reboot/boot time #2: `2026-06-06 12:05:41 +08:00`; `wmic os get lastbootuptime` returned `20260606120541.500000+480`.
   - pipeline resume using the run-local `config.yaml` exposed a `SameFileError` when copying config into the same run directory; `copy_config` now skips `shutil.copy2` when source and target resolve to the same file, while still writing `resolved_config.json`.
+  - final result on 2026-06-06: discard, params `10.526M`, val acc `0.979302`, macro P/R/F1 `0.888678 / 0.905965 / 0.896199`; no test metrics generated.
+  - best checkpoint was epoch `7` with val macro F1 `0.896199`, below the current no-distill threshold `0.910745916167499`.
+  - interpretation: shared-query attention readout did not rescue the step-conditioned CTM trajectory. It preserved reasonable recall but lost too much macro precision, with Scratch F1 `0.7917` and Loc F1 `0.8119` in the final val report. Keep readout-side exploration, but do not repeat shared attention; the next single-factor test is class-specific attention initialized to uniform readout.
 - Prepared follow-up readout-side candidate on 2026-06-06:
   - added default-off CTM `readout: class_attention` plus `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_readout.yaml`.
-  - do not run it before the interrupted `stepcond_attention_readout` candidate is completed or deliberately skipped; this is the next readout-side single-factor option after the shared-query attention readout.
+  - run it after the now-completed discarded `stepcond_attention_readout` candidate; this is the next readout-side single-factor option after the shared-query attention readout.
   - rationale: previous deep supervision, learned halt, topology gate, and soft step-consistency variants all weakened the useful step-conditioned CTM trajectory. Class-specific attention readout avoids extra step-logit losses and instead lets each wafer-defect class query the final recurrent token state for its own spatial evidence.
   - implementation: `class_readout_query` has one learned query per class and starts from zero, so initial attention is uniform and the CTM logits begin equivalent to mean pooling; training can then specialize token evidence per class. Generic auxiliary heads still receive mean-pooled CTM features.
   - diagnostics: the model now caches detached `last_readout_weights` for shared attention readout and `last_class_readout_weights` for class-specific readout, enabling later validation-only export of per-class CTM token evidence maps without changing training loss or inference outputs.

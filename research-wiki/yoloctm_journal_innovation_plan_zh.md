@@ -488,3 +488,26 @@ val_adaptive_max_step_fraction: 0.0888
 ```
 
 解释：这条候选没有使用外部教师，也没有增加推理参数，只让 step 4 logits 以 KL 形式软匹配最终 logits 的 stop-gradient 分布，希望比 hard deep supervision 更温和地平滑 thought trajectory。但结果仍明显低于 `stepcond_adaptive` 的 `0.910746`。这说明当前最有价值的不是让每一步 logits 对齐，而是保持 step-conditioned CTM 自由形成自己的状态轨迹；无论 hard label、halt label，还是 soft logit consistency，都会削弱这个轨迹。下一步应避免继续给 step logits 加训练损失，优先做 readout-side 辅助、trajectory 诊断分析，或准备外部 wafer benchmark 做稳健性验证。
+
+## 2026-06-06 supplement: Step-Conditioned CTM + Shared Attention Readout
+
+```text
+config: AutoResearch/configs/wm811k_autoresearch_stepcond_attention_readout.yaml
+run: autoresearch_yoloctm_nodistill_stepcond_attention_readout_tau04_e10_20260605_220639
+status: discard
+params: 10.526M
+epochs: 10
+val acc: 0.979302
+val macro P/R/F1: 0.888678 / 0.905965 / 0.896199
+threshold: 0.910745916167499
+test: disabled
+```
+
+Best checkpoint was epoch 7:
+
+```text
+best_val_acc: 0.979302
+best_val_macro_f1: 0.896199
+```
+
+Interpretation: replacing mean CTM token readout with a single shared attention query did not improve the kept step-conditioned residual CTM. The run kept reasonable recall but lost too much macro precision, especially on the harder minority/localization classes. This suggests the readout-side idea is still worth testing, but the shared query is too blunt. The next queued single-factor candidate is class-specific attention readout, initialized so it starts equivalent to mean pooling and can then specialize token evidence per defect class.
