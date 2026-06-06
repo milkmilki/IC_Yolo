@@ -113,5 +113,5 @@ logging:
   filename: pipeline.log
   autoresearch: true
   status: auto
-  keep_val_macro_f1_min: 0.910745916167499
+  keep_val_macro_f1_min: 0.9115232889273587
   description: "Deep non-distilled candidate: keep the best step-conditioned residual CTM dynamics and use class-specific CTM readout with a zero-initialized polar coordinate bias, targeting Loc/Edge-Loc spatial localization without step-logit losses or test access; validation-only screening."
