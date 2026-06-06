@@ -655,3 +655,46 @@ val_adaptive_max_step_fraction: 0.103
 Compared with the current class-attention best at threshold `0.90`, raising `adaptive_confidence_threshold` to `0.95` increased validation average thought steps from about `4.152` to `4.207`, and the max-step fraction from about `0.076` to `0.103`. However, the official validation report with the predeclared `prior_logit_tau=0.4` is exactly equal to the current best, so it is not a protocol-valid improvement.
 
 Interpretation: raw confidence-threshold halting changes compute allocation but not the selected validation decision boundary for this architecture. This supports the earlier diagnosis that step-conditioned training creates the useful CTM trajectory, while inference-time confidence gating alone is weak. The next single-factor dynamic-depth test is therefore `adaptive_min_steps: 5`: force every sample to take one additional thought step, rather than only letting a larger low-confidence subset continue.
+
+## 2026-06-07 supplement: Class-Attention Readout + Minimum 5 Thought Steps
+
+```text
+config: AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_min5.yaml
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_min5_tau04_e10_20260607_000637
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.982385
+val macro P/R/F1: 0.916058 / 0.908026 / 0.911523
+threshold: 0.9115232889273587
+test: disabled
+```
+
+Training history again reported epoch 10 as the internal best:
+
+```text
+best_val_acc: 0.982385
+best_val_macro_f1: 0.911584
+val_adaptive_avg_steps: 5.076
+val_adaptive_max_step_fraction: 0.076
+```
+
+Interpretation: forcing every validation sample to run at least 5 thought steps increased compute but left the official prior-calibrated validation report exactly equal to the current class-attention best. Together with the `halt95` result, this says the useful gain is not coming from runtime halting policy; it is already embedded in the trained step-conditioned trajectory and class-specific readout. Do not keep sweeping confidence thresholds or minimum steps. The next training candidate should target class-boundary formation rather than inference-time thought depth.
+
+## 2026-06-07 next candidate: Class-Attention Readout + Deferred LDAM
+
+The next single-factor candidate is:
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam.yaml
+```
+
+It keeps the current best architecture unchanged and changes only the training loss:
+
+```text
+loss: ldam
+ldam_max_margin: 0.2
+ldam_start_epoch: 7
+```
+
+Rationale: the current best is precision-led but still fragile on long-tail class boundaries. LDAM-style margins are a direct long-tailed recognition prior and act during late training, not at inference. This is cleaner than further halting sweeps: no distillation, no test access, no additional inference parameters, same 10-epoch budget, and validation-only keep/discard threshold `0.9115232889273587`.
