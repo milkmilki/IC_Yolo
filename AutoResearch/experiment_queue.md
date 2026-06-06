@@ -21,11 +21,12 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
 
 2. Next active run:
-   - Prepared config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m005.yaml`.
-   - Planned run name: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m005_tau04_e10`.
+   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m005_tau04_e10_20260607_040342`.
+   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m005.yaml`.
    - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam_m005.cmd`.
    - Single factor over the new best LDAM-DRW run: keep architecture and schedule, but reduce `ldam_max_margin` from `0.1` to `0.05`.
    - Rationale: `ldam_max_margin=0.1` is a new validation-only keep (`0.912020609416007`) driven by small gains on Scratch, Edge-Loc, Center, and Edge-Ring. Try one milder margin to test whether class-boundary pressure has an optimum below 0.1; if it fails, stop LDAM margin tuning.
+   - Launched on 2026-06-07 04:03 +08:00 via `WM811K_AutoResearch_ClassAttentionLDAMM005`; initial health check showed epoch 1 progressing, `[ldam] max_margin=0.0500 starts at epoch 7`, and GPU active.
    - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
    - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
    - No external wafer benchmark is currently present under `data/`; do not evaluate external performance until dataset placement, metadata audit, and label mapping are committed.

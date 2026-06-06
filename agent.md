@@ -454,3 +454,4 @@ Keep it short and operational.
   - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m005.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m005.cmd`.
   - single factor over the new best: reduce `ldam_max_margin` from `0.1` to `0.05`; keep architecture, `ldam_start_epoch=7`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
   - if margin `0.05` does not beat `0.912020609416007`, stop LDAM margin tuning and move to external robustness/evidence or a qualitatively different class-boundary objective.
+  - launched on 2026-06-07 04:03 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m005_tau04_e10_20260607_040342` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM005`; initial health check showed epoch 1 progressing, `[ldam] max_margin=0.0500 starts at epoch 7`, and GPU active.
