@@ -628,3 +628,30 @@ test: disabled
 The class-delta report versus the current best shows macro F1 `-0.0047899818026686525` and accuracy `-0.00046253469010182346`. The blend fallback improved Scratch F1 by `+0.021519`, but damaged Near-full `-0.045455`, Edge-Loc `-0.009855`, and Center `-0.008465`.
 
 Interpretation: the fallback gate did what it was meant to do for Scratch, but it also weakened the location-sensitive gains that made class-specific attention useful. The immediate readout-loss/gating family is now mostly exhausted: shared attention, polar bias, entropy sharpening, and mean blend all failed to beat the plain class-specific attention readout. The next step should favor external-data robustness or deeper validation-only evidence analysis rather than another small readout regularizer.
+
+## 2026-06-06 supplement: Class-Attention Readout + Higher Halt Threshold
+
+```text
+config: AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_halt95.yaml
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_halt95_tau04_e10_20260606_220920
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.982385
+val macro P/R/F1: 0.916058 / 0.908026 / 0.911523
+threshold: 0.9115232889273587
+test: disabled
+```
+
+Training history reported epoch 10 as the internal best:
+
+```text
+best_val_acc: 0.982385
+best_val_macro_f1: 0.911584
+val_adaptive_avg_steps: 4.207
+val_adaptive_max_step_fraction: 0.103
+```
+
+Compared with the current class-attention best at threshold `0.90`, raising `adaptive_confidence_threshold` to `0.95` increased validation average thought steps from about `4.152` to `4.207`, and the max-step fraction from about `0.076` to `0.103`. However, the official validation report with the predeclared `prior_logit_tau=0.4` is exactly equal to the current best, so it is not a protocol-valid improvement.
+
+Interpretation: raw confidence-threshold halting changes compute allocation but not the selected validation decision boundary for this architecture. This supports the earlier diagnosis that step-conditioned training creates the useful CTM trajectory, while inference-time confidence gating alone is weak. The next single-factor dynamic-depth test is therefore `adaptive_min_steps: 5`: force every sample to take one additional thought step, rather than only letting a larger low-confidence subset continue.

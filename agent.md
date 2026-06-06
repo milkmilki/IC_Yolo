@@ -22,7 +22,7 @@ Keep it short and operational.
 - The development host has suffered repeated BugCheck restarts during earlier GPU and CPU phases. A `400 W` power floor and `300-1200 MHz` graphics-clock lock mitigated but did not prove a root-cause fix.
 - The completed DKD experiment used effective batch `64` as `micro_batch: 16` with gradient accumulation `4`, plus resumable epoch checkpoints.
 - Preserve `last_yoloctm.pt` from interrupted runs; after a process exit or host restart, record the event and autonomously resume the same candidate rather than starting a concurrent duplicate.
-- Apply `nvidia-smi -pl 400` and `nvidia-smi -lgc 300,1200` before each GPU training or GPU evaluation phase. The user requested GPU test evaluation for speed; run it only after training has ended and no competing process remains.
+- As of 2026-06-06, the user explicitly requested default GPU policy: do not set `nvidia-smi -pl` or `nvidia-smi -lgc` before training. Continue checking for unrelated compute jobs, but ordinary desktop/remote/browser graphics usage does not block our training.
 - `autoresearch_yoloctm_crossscan_dkd_priorcal_20260526_201638` reached epoch 3 (`val_macro_f1=0.8838`) before the development host was powered off by `RuntimeBroker.exe` at `2026-05-26 23:00:32` (event `1074`, not a BugCheck). It resumed after the `2026-05-27 09:12:53` boot, reached epoch 8 with best observed `val_macro_f1=0.8967` at epoch 6, then was interrupted by `BugCheck 0x50` reported at `2026-05-27 11:00:47`; resume it from `last_yoloctm.pt`.
 - If the user interrupts a foreground terminal, always check local process state and `pipeline.log` before restarting.
 
@@ -312,7 +312,7 @@ Keep it short and operational.
 1. Check `AutoResearch/results.tsv` first.
    - For the current no-distillation readout-side queue and evidence-package commands, also read `AutoResearch/experiment_queue.md`.
 2. If the latest run is unclear, inspect the local development-machine `pipeline.log`.
-3. If the run finished but metrics are missing, run validation/test from the development machine on controlled GPU (`--eval-device 0`) after reapplying the power/clock limits and verifying there is no concurrent process.
+3. If the run finished but metrics are missing, run the configured validation-only metrics from the development machine on GPU after verifying there is no concurrent training/compute process. Do not reapply power or clock limits, and do not read test metrics during the current validation-only no-distillation search.
 4. After every run, make sure both:
    - `AutoResearch/results.tsv` has a row
    - `AutoResearch/logs/` has a JSON summary
@@ -417,3 +417,15 @@ Keep it short and operational.
   - result on 2026-06-06: discard, params `10.527M`, val acc `0.981923`, macro P/R/F1 `0.912642 / 0.901655 / 0.906733`; no test metrics generated.
   - class delta vs current best: macro F1 `-0.004790`, accuracy `-0.000463`. Scratch improved by `+0.0215` F1, but Near-full `-0.0455`, Edge-Loc `-0.0099`, and Center `-0.0085` drove the discard.
   - interpretation: per-class mean fallback/gating partially helps Scratch but weakens the location-sensitive gains that made class-specific attention useful. Do not continue this fallback/gating direction without a stronger class-conditional rationale.
+- Class-attention higher halt-threshold result on 2026-06-06:
+  - ran `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_halt95.yaml` as `autoresearch_yoloctm_nodistill_stepcond_class_attention_halt95_tau04_e10_20260606_220920`.
+  - protocol: no distillation, validation-only screening, `test.enabled: false`, fixed 10 epochs, `tau=0.4`; starting from the kept class-specific attention readout and changing only `adaptive_confidence_threshold` from `0.90` to `0.95`.
+  - result: discard by official AutoResearch metrics, params `10.527M`, val acc `0.982385`, macro P/R/F1 `0.916058 / 0.908026 / 0.911523`; no test metrics generated.
+  - training history reported internal best `best_val_macro_f1=0.911584` at epoch `10`, but the official validation metrics with predeclared prior calibration match the existing class-attention best exactly and do not clear the strict threshold `0.9115232889273587`.
+  - dynamic-depth effect: raising the confidence threshold increased average validation thought steps from about `4.152` to `4.207` and max-step fraction from about `0.076` to `0.103`, but did not change the official selected validation decision boundary.
+  - interpretation: raw confidence-threshold halting changes compute allocation but is not enough to improve this architecture. The next dynamic-depth single factor is `adaptive_min_steps: 5`, forcing one additional minimum thought step for every sample while keeping the threshold at `0.90`.
+- Prepared class-attention minimum-step follow-up on 2026-06-06:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_min5.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_min5.cmd`.
+  - single factor: keep current best class-specific attention readout, `steps=6`, `adaptive_confidence_threshold=0.90`, and change only `adaptive_min_steps` from `4` to `5`.
+  - protocol remains no distillation, 10 epochs, validation-only screening, `test.enabled: false`, and keep/discard threshold `0.9115232889273587`.
+  - operational note: at 2026-06-07 00:03 +08:00, several already completed AutoResearch scheduled tasks had relaunched old completed configs (`class_attention`, `polar`, `entropy`, `blend`, `halt95`) and were concurrently occupying the GPU. They were our own stale experiment processes, not user desktop/browser/remote-control tasks, so they were stopped before launching the current queue candidate.

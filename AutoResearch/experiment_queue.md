@@ -20,14 +20,16 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Generated balanced readout evidence figures at `runs/diagnostics/class_attention_readout_val_figures_balanced` using `--split val --per-class-samples 24`; the selected cases cover all 9 classes.
    - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
 
-2. Next direction to prepare:
-   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_halt95_tau04_e10_20260606_220920`.
-   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_halt95.yaml`.
-   - Single factor: keep the current best class-specific attention architecture and change only `adaptive_confidence_threshold` from `0.90` to `0.95`, so lower-confidence samples take more CTM thought steps.
+2. Next active run:
+   - Prepared config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_min5.yaml`.
+   - Planned run name: `autoresearch_yoloctm_nodistill_stepcond_class_attention_min5_tau04_e10`.
+   - Single factor: keep the current best class-specific attention architecture and change only `adaptive_min_steps` from `4` to `5`, while keeping `adaptive_confidence_threshold: 0.90`.
+   - Rationale: `halt95` proved that asking more low-confidence samples to continue from step 4 to step 6 increases average compute but does not change official validation decisions. `min5` tests the sharper question of whether forcing one extra thought step for every validation sample makes the step-conditioned trajectory useful in a protocol-valid way.
    - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
    - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
    - No external wafer benchmark is currently present under `data/`; do not evaluate external performance until dataset placement, metadata audit, and label mapping are committed.
    - The class-attention mean-blend run is completed and discarded; it helped Scratch but damaged Near-full, Edge-Loc, and Center, so do not continue the mean-fallback/gating direction without a stronger class-conditional rationale.
+   - The class-attention halt95 run is completed and discarded/equal-to-best; it increased average thought steps but did not exceed the current validation threshold.
 
 ## Do Not Rerun
 
@@ -42,6 +44,7 @@ These 2026-06-05 candidates are already completed and recorded:
 - `stepcond_class_attention_polar_readout`
 - `stepcond_class_attention_entropy_readout`
 - `stepcond_class_attention_blend_readout`
+- `stepcond_class_attention_halt95`
 
 ## Evidence Package Commands
 
@@ -79,6 +82,6 @@ D:\anaconda3\envs\pcb_yolo\python.exe scripts\run_yoloctm_readout_figure_pipelin
 ## Run Gating
 
 - Before GPU training: do not set power limits or lock GPU clocks; use the default GPU policy.
-- If GPU compute apps show only desktop/browser/remote-control graphics processes and Python process status cannot be confirmed, do not start training.
+- Ordinary desktop/browser/remote-control graphics processes do not block training; only obvious unrelated training/compute jobs should make the heartbeat wait and report.
 - If an existing YoloCTM Python training process is active and making progress, monitor only; do not duplicate a run.
 - If a machine reboot happens, append `AutoResearch/reboot_events.tsv` with the boot time and candidate-specific reboot count.
