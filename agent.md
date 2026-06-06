@@ -304,6 +304,8 @@ Keep it short and operational.
   - single factor over the current best: keep step-conditioned residual CTM and class-specific attention readout, change only `adaptive_confidence_threshold` from `0.90` to `0.95`.
   - rationale: previous readout-loss/gate variants are exhausted, but the user-requested CTM behavior of letting low-confidence samples take more thought steps is still worth testing directly on the current best architecture.
   - protocol remains no distillation, fixed 10 epochs, validation-only screening, `test.enabled: false`, and keep/discard threshold `0.9115232889273587`.
+  - launched on 2026-06-06 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_halt95_tau04_e10_20260606_220920` via scheduled task `WM811K_AutoResearch_ClassAttentionHalt95`.
+  - current run-local recovery wrapper: `scripts/run_stepcond_class_attention_halt95.cmd`.
 
 ## Practical workflow
 
