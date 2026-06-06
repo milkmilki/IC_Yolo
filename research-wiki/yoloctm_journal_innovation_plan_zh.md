@@ -827,3 +827,31 @@ task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR005
 initial health: epoch 1 progressing, GPU active
 note: scheduled task disabled after manual start to avoid duplicate relaunch
 ```
+
+### Result: keep
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr005_tau04_e10_20260607_050437
+status: keep
+params: 10.527M
+epochs: 10
+val acc: 0.981807
+val macro P/R/F1: 0.910768 / 0.916302 / 0.913131
+threshold: 0.912020609416007
+test: disabled
+```
+
+Interpretation: a very small deferred classifier-boundary regularizer improves the validation-only macro F1 beyond the margin-only LDAM best. This supports the class-boundary direction, but the gain should remain guarded against validation overfitting; continue with one stronger CBR weight to bracket the useful range, then stop small weight tuning if it fails.
+
+## 2026-06-07 next candidate: Class-Attention LDAM-DRW + CBR 0.01
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010.yaml
+loss: ldam_drw
+ldam_max_margin: 0.1
+classifier_cbr_weight: 0.01
+classifier_cbr_start_epoch: 7
+keep_val_macro_f1_min: 0.9131313775284673
+```
+
+This is a single-factor strength check over the kept CBR `0.005` run. It keeps the architecture, readout, split, epoch budget, no-distillation protocol, and no-test rule fixed.

@@ -21,12 +21,11 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
 
 2. Next active run:
-   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr005_tau04_e10_20260607_050437`.
-   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr005.yaml`.
-   - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam_m01_cbr005.cmd`.
-   - Single factor over the new best: keep `ldam_max_margin=0.1` and add a very small deferred classifier-boundary regularizer (`classifier_cbr_weight=0.005`, `classifier_cbr_start_epoch=7`).
-   - Rationale: margin 0.05 failed below the margin 0.1 best, so LDAM margin tuning stops. The next test is a qualitatively different class-boundary pressure that regularizes classifier geometry rather than changing per-class margins.
-   - Launched on 2026-06-07 05:04 +08:00 via `WM811K_AutoResearch_ClassAttentionLDAMM01CBR005`; initial health check showed epoch 1 progressing, `[cbr] classifier regularization weight=0.0050 ... starts at epoch 7`, and GPU active.
+   - Prepared config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010.yaml`.
+   - Planned run name: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_tau04_e10`.
+   - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam_m01_cbr010.cmd`.
+   - Single factor over the new best: keep class-specific attention readout, `ldam_max_margin=0.1`, and deferred CBR start epoch 7, but increase `classifier_cbr_weight` from `0.005` to `0.01`.
+   - Rationale: CBR `0.005` is a validation-only keep and outperformed the margin-only LDAM best. Try one stronger value to bracket the useful regularization strength; if it fails, stop CBR weight tuning and move to qualitatively different evidence/structure work.
    - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
    - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
    - No external wafer benchmark is currently present under `data/`; do not evaluate external performance until dataset placement, metadata audit, and label mapping are committed.
@@ -37,6 +36,7 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Relaunched corrected LDAM-DRW on 2026-06-07 02:04 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020428`; result: discard, val macro F1 `0.9108497579599639`.
    - LDAM-DRW margin 0.1 completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_tau04_e10_20260607_030102`; result: keep, val macro F1 `0.912020609416007`.
    - LDAM-DRW margin 0.05 completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m005_tau04_e10_20260607_040342`; result: discard, val macro F1 `0.9103854226442668`.
+   - LDAM-DRW margin 0.1 + CBR 0.005 completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr005_tau04_e10_20260607_050437`; result: keep, val macro F1 `0.9131313775284673`.
 
 ## Do Not Rerun
 
@@ -56,6 +56,7 @@ These 2026-06-05 candidates are already completed and recorded:
 - `stepcond_class_attention_ldam`
 - `stepcond_class_attention_ldam_m01`
 - `stepcond_class_attention_ldam_m005`
+- `stepcond_class_attention_ldam_m01_cbr005`
 
 ## Evidence Package Commands
 
