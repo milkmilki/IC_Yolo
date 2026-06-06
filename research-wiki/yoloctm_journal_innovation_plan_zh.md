@@ -855,3 +855,12 @@ keep_val_macro_f1_min: 0.9131313775284673
 ```
 
 This is a single-factor strength check over the kept CBR `0.005` run. It keeps the architecture, readout, split, epoch budget, no-distillation protocol, and no-test rule fixed.
+
+Launched on 2026-06-07 06:04 +08:00:
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_tau04_e10_20260607_060435
+task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010
+initial health: epoch 1 progressing, GPU active
+note: scheduled task disabled after manual start to avoid duplicate relaunch
+```
