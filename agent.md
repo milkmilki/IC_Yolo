@@ -342,8 +342,9 @@ Keep it short and operational.
   - candidate `autoresearch_yoloctm_nodistill_stepcond_attention_readout_tau04_e10_20260605_220639` was launched from `AutoResearch/configs/wm811k_autoresearch_stepcond_attention_readout.yaml` after GPU looked idle; it keeps the best step-conditioned residual CTM and changes only the CTM readout from mean to attention.
   - the initial foreground SSH session ended before completion, leaving `last_yoloctm.pt` and `best_yoloctm.pt` in the run directory with no AutoResearch JSON yet.
   - resume from `last_yoloctm.pt` later hit an SSH reset while epoch `3` was in progress; `pipeline.log` stopped around epoch `3` batch `5200/7567`.
-  - confirmed machine reboot count for this candidate so far: `1`.
-  - confirmed reboot/boot time: `2026-06-05 22:49:14 +08:00`; `wmic os get lastbootuptime` returned `20260605224914.500000+480`.
+  - confirmed machine reboot count for this candidate so far: `2`.
+  - confirmed reboot/boot time #1: `2026-06-05 22:49:14 +08:00`; `wmic os get lastbootuptime` returned `20260605224914.500000+480`.
+  - confirmed reboot/boot time #2: `2026-06-06 12:05:41 +08:00`; `wmic os get lastbootuptime` returned `20260606120541.500000+480`.
   - pipeline resume using the run-local `config.yaml` exposed a `SameFileError` when copying config into the same run directory; `copy_config` now skips `shutil.copy2` when source and target resolve to the same file, while still writing `resolved_config.json`.
 - Prepared follow-up readout-side candidate on 2026-06-06:
   - added default-off CTM `readout: class_attention` plus `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_readout.yaml`.

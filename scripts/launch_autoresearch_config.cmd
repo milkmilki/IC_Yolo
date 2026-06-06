@@ -10,6 +10,14 @@ if /I "%~1"=="/foreground" (
 )
 set "CONFIG=%~1"
 if "%CONFIG%"=="" set "CONFIG=AutoResearch\configs\wm811k_autoresearch_topology_ctm.yaml"
+if not "%~1"=="" shift
+set "EXTRA_ARGS="
+:collect_extra_args
+if "%~1"=="" goto extra_args_done
+set "EXTRA_ARGS=%EXTRA_ARGS% %1"
+shift
+goto collect_extra_args
+:extra_args_done
 
 if not exist "%PYTHON_EXE%" (
     echo Python executable not found: %PYTHON_EXE% 1>&2
@@ -29,15 +37,15 @@ if not exist "%CONFIG%" (
 )
 
 if not exist "%PROJECT_ROOT%\AutoResearch\launch_logs" mkdir "%PROJECT_ROOT%\AutoResearch\launch_logs"
-for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "STAMP=%%i"
+set "STAMP=%RANDOM%%RANDOM%"
 set "STDOUT_LOG=%PROJECT_ROOT%\AutoResearch\launch_logs\autoresearch_cmd_%STAMP%.out.log"
 set "STDERR_LOG=%PROJECT_ROOT%\AutoResearch\launch_logs\autoresearch_cmd_%STAMP%.err.log"
 
 pushd "%PROJECT_ROOT%"
 if "%FOREGROUND%"=="1" (
-    "%PYTHON_EXE%" "%PROJECT_ROOT%\scripts\run_wm811k_pipeline.py" --config "%CONFIG%"
+    "%PYTHON_EXE%" "%PROJECT_ROOT%\scripts\run_wm811k_pipeline.py" --config "%CONFIG%" %EXTRA_ARGS%
 ) else (
-    start "wm811k-autoresearch" /B "%PYTHON_EXE%" "%PROJECT_ROOT%\scripts\run_wm811k_pipeline.py" --config "%CONFIG%" > "%STDOUT_LOG%" 2> "%STDERR_LOG%"
+    start "wm811k-autoresearch" /B "%PYTHON_EXE%" "%PROJECT_ROOT%\scripts\run_wm811k_pipeline.py" --config "%CONFIG%" %EXTRA_ARGS% > "%STDOUT_LOG%" 2> "%STDERR_LOG%"
 )
 popd
 
