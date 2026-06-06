@@ -455,3 +455,9 @@ Keep it short and operational.
   - single factor over the new best: reduce `ldam_max_margin` from `0.1` to `0.05`; keep architecture, `ldam_start_epoch=7`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
   - if margin `0.05` does not beat `0.912020609416007`, stop LDAM margin tuning and move to external robustness/evidence or a qualitatively different class-boundary objective.
   - launched on 2026-06-07 04:03 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m005_tau04_e10_20260607_040342` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM005`; initial health check showed epoch 1 progressing, `[ldam] max_margin=0.0500 starts at epoch 7`, and GPU active.
+  - result on 2026-06-07: discard, params `10.527M`, val acc `0.982231`, macro P/R/F1 `0.916364 / 0.905418 / 0.910385`; no test metrics generated.
+  - interpretation: margin `0.05` is weaker than the kept `0.1`, so stop LDAM margin tuning. The next candidate should use a qualitatively different class-boundary objective.
+- Prepared class-attention LDAM-DRW + tiny CBR follow-up on 2026-06-07:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr005.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m01_cbr005.cmd`.
+  - single factor over the new best: add `classifier_cbr_weight=0.005` from epoch `7` while keeping `ldam_max_margin=0.1`, class-specific attention readout, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+  - rationale: CBR regularizes classifier geometry rather than per-class margins, so it is a qualitatively different class-boundary pressure after LDAM margin tuning is exhausted.

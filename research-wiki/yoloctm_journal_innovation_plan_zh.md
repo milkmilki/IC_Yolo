@@ -782,3 +782,39 @@ ldam_start_epoch: 7
 ```
 
 This is the final narrow margin-strength check after the successful `0.1` run. If it fails to beat `0.912020609416007`, stop LDAM margin tuning and move to external robustness/evidence or a qualitatively different class-boundary objective.
+
+### Result: discard
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m005_tau04_e10_20260607_040342
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.982231
+val macro P/R/F1: 0.916364 / 0.905418 / 0.910385
+threshold: 0.912020609416007
+test: disabled
+```
+
+Training history:
+
+```text
+best_val_acc: 0.982231
+best_val_macro_f1: 0.910385
+val_adaptive_avg_steps: 4.152
+val_adaptive_max_step_fraction: 0.076
+```
+
+Interpretation: margin `0.05` underperforms both the kept margin `0.1` and the plain class-attention model. LDAM margin strength is now sufficiently bracketed: `0.2` is too strong, `0.05` too weak, and `0.1` is the current validation-only best. Stop LDAM margin tuning.
+
+## 2026-06-07 next candidate: Class-Attention LDAM-DRW + Tiny CBR
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr005.yaml
+loss: ldam_drw
+ldam_max_margin: 0.1
+classifier_cbr_weight: 0.005
+classifier_cbr_start_epoch: 7
+```
+
+This keeps the current best architecture and margin, but adds a tiny deferred classifier-boundary regularizer. It is a qualitatively different class-boundary objective from margin tuning: the goal is to regularize classifier geometry without changing inference parameters, distillation, data split, or the 10-epoch validation-only protocol.
