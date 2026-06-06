@@ -15,6 +15,7 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
 
 1. Class-attention mean-blend readout:
    - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_blend_readout.yaml`
+   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_blend_readout_tau04_e10_20260606_190418`
    - Single factor over current best: add one learnable gate per class to blend class-specific attention evidence with mean CTM pooling before the class logit.
    - Rationale: validation-only class deltas show class attention improves Edge-Loc/Center/Loc but slightly hurts Scratch/Near-full/Donut; a per-class mean fallback may preserve spatial gains while protecting fragile classes.
 

@@ -402,3 +402,5 @@ Keep it short and operational.
   - rationale: validation-only class deltas show class attention improves Edge-Loc/Center/Loc but slightly hurts Scratch/Near-full/Donut. A per-class mean fallback may preserve location-sensitive gains while letting fragile classes retain stable mean evidence.
   - protocol remains no distillation, 10 epochs, validation-only screening, `test.enabled: false`, and keep/discard threshold `0.9115232889273587`.
   - `py_compile` and `--check-config` passed on 2026-06-06.
+  - launched on 2026-06-06 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_blend_readout_tau04_e10_20260606_190418` via scheduled task `WM811K_AutoResearch_ClassAttentionBlend`.
+  - current run-local recovery wrapper: `scripts/run_stepcond_class_attention_blend_readout.cmd`.
