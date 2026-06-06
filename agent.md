@@ -300,6 +300,7 @@ Keep it short and operational.
 ## Practical workflow
 
 1. Check `AutoResearch/results.tsv` first.
+   - For the current no-distillation readout-side queue and evidence-package commands, also read `AutoResearch/experiment_queue.md`.
 2. If the latest run is unclear, inspect the local development-machine `pipeline.log`.
 3. If the run finished but metrics are missing, run validation/test from the development machine on controlled GPU (`--eval-device 0`) after reapplying the power/clock limits and verifying there is no concurrent process.
 4. After every run, make sure both:
