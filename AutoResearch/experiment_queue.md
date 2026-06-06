@@ -13,10 +13,10 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
 
 ## Active / Next Runs
 
-1. Polar class-specific attention readout:
-   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_polar_readout.yaml`
-   - Single factor over class attention: add zero-initialized per-class polar coordinate bias to CTM token readout.
-   - Rationale: class-wise deltas show `stepcond_adaptive` improves Scratch/Donut/Edge-Ring/Random but loses Edge-Loc and Loc, so the next readout-side idea should help location-sensitive classes without constraining the CTM thought trajectory.
+1. Class-specific attention entropy:
+   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_entropy_readout.yaml`
+   - Single factor over class attention: add a small training-only entropy minimization loss on class-specific CTM readout weights.
+   - Rationale: polar positional bias hurt validation macro F1, but class-specific readout remains the best no-distillation architecture. The next readout-side test should encourage sharper token evidence without adding step-logit losses, distillation, coordinate priors, or inference-time parameters.
 
 ## Do Not Rerun
 
@@ -28,6 +28,7 @@ These 2026-06-05 candidates are already completed and recorded:
 - `stepcond_consistency`
 - `stepcond_attention_readout`
 - `stepcond_class_attention_readout`
+- `stepcond_class_attention_polar_readout`
 
 ## Evidence Package Commands
 

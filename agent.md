@@ -375,3 +375,11 @@ Keep it short and operational.
   - current keep/discard threshold is `0.9115232889273587`.
   - rationale: class-wise report deltas show the kept `stepcond_adaptive` gains macro F1 through Scratch/Donut/Edge-Ring/Random, but loses F1 on Edge-Loc and Loc. The polar class-attention readout keeps the useful step-conditioned CTM trajectory unconstrained while giving each class a zero-initialized radial/position bias over CTM tokens, targeting location-sensitive defects without step-logit losses, distillation, or test access.
   - diagnostics: readout export now marks `model_readout: class_attention_polar` and stores per-sample polar coordinates plus learned class polar parameters in the `.npz` files; the overlay renderer treats this as class-specific attention so later figures can explain both token evidence and location bias.
+  - result on 2026-06-06: discard, params `10.527M`, val acc `0.977297`, macro P/R/F1 `0.875142 / 0.913136 / 0.891979`; no test metrics generated.
+  - best checkpoint was epoch `5` with val macro F1 `0.891979`, below the current no-distill threshold `0.9115232889273587`.
+  - interpretation: the explicit polar readout bias increased macro recall but sharply reduced precision and overall macro F1. This suggests location priors are too strong at the readout score level; keep the class-specific attention readout as the best architecture and avoid more coordinate bias until there is independent evidence from validation-only readout maps.
+- Prepared readout-sharpness follow-up on 2026-06-06:
+  - added default-off `readout_entropy_weight` support and `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_entropy_readout.yaml`.
+  - single factor: start from the current best class-specific attention readout and add a small training-only normalized entropy penalty (`readout_entropy_weight: 0.01`) on attention weights.
+  - rationale: class-specific readout is the current validation-only no-distillation best, while shared attention and polar bias failed. The next readout-side test should encourage sharper class token evidence without touching CTM step logits, using distillation, adding coordinate priors, reading test, or changing inference-time parameters.
+  - current keep/discard threshold remains validation macro F1 `0.9115232889273587`.

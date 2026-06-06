@@ -537,3 +537,28 @@ val_adaptive_max_step_fraction: 0.076
 ```
 
 Interpretation: class-specific attention readout is the first readout-side variant to improve the kept step-conditioned CTM. Unlike the shared-query attention readout, it lets each class query the recurrent token field with its own zero-initialized query, starting from mean-pooling behavior and then specializing spatial evidence. The improvement is small but protocol-valid under the 10-epoch, no-distillation, validation-only rule. It supports the paper direction that the CTM trajectory should remain unconstrained across steps, while the readout should become class-aware.
+
+## 2026-06-06 supplement: Step-Conditioned CTM + Class-Specific Polar Attention Readout
+
+```text
+config: AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_polar_readout.yaml
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_polar_readout_tau04_e10_20260606_145730
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.977297
+val macro P/R/F1: 0.875142 / 0.913136 / 0.891979
+threshold: 0.9115232889273587
+test: disabled
+```
+
+Best checkpoint was epoch 5:
+
+```text
+best_val_acc: 0.977297
+best_val_macro_f1: 0.891979
+val_adaptive_avg_steps: 4.254
+val_adaptive_max_step_fraction: 0.127
+```
+
+Interpretation: adding a zero-initialized polar coordinate bias to class-specific readout was not helpful. It raised recall pressure but lost too much precision, so the location prior is too blunt when injected directly into readout scores. The current best remains class-specific attention readout without coordinate bias. The next single-factor run is a softer readout-side idea: a small training-only normalized entropy penalty on class readout weights, intended to sharpen token evidence without step-logit losses, distillation, coordinate priors, test access, or inference-time parameter changes.

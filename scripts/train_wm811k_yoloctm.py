@@ -1090,6 +1090,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--step-consistency-temperature", type=float, default=1.0)
     parser.add_argument("--learned-halt-loss-weight", type=float, default=0.0)
     parser.add_argument("--learned-halt-confidence-threshold", type=float, default=0.9)
+    parser.add_argument("--readout-entropy-weight", type=float, default=0.0)
     parser.add_argument("--loss", choices=["weighted_ce", "balanced_softmax", "ldam_drw"], default="weighted_ce")
     parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--ldam-max-margin", type=float, default=0.2)
@@ -1343,6 +1344,7 @@ def compute_train_loss_and_logits(
     step_consistency_temperature: float = 1.0,
     learned_halt_loss_weight: float = 0.0,
     learned_halt_confidence_threshold: float = 0.9,
+    readout_entropy_weight: float = 0.0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     need_embedding = float(prototype_bcl_weight) > 0
     embedding = None
@@ -1434,6 +1436,16 @@ def compute_train_loss_and_logits(
             halt_losses.append(F.binary_cross_entropy_with_logits(halt_logits, target))
         if halt_losses:
             loss = loss + float(learned_halt_loss_weight) * torch.stack(halt_losses).mean()
+    if readout_entropy_weight > 0:
+        readout_weights = getattr(model, "last_class_readout_weights", None)
+        if readout_weights is None:
+            readout_weights = getattr(model, "last_readout_weights", None)
+        if readout_weights is None:
+            raise RuntimeError("readout entropy loss requires attention or class_attention CTM readout")
+        probs = readout_weights.clamp_min(1e-8)
+        entropy = -(probs * probs.log()).sum(dim=-1)
+        normalizer = torch.log(probs.new_tensor(float(probs.size(-1)))).clamp_min(1e-6)
+        loss = loss + float(readout_entropy_weight) * (entropy / normalizer).mean()
     return loss, logits
 
 
@@ -1463,6 +1475,7 @@ def train_one_epoch(
     step_consistency_temperature: float = 1.0,
     learned_halt_loss_weight: float = 0.0,
     learned_halt_confidence_threshold: float = 0.9,
+    readout_entropy_weight: float = 0.0,
     grad_accum_steps: int = 1,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
     sam_rho: float = 0.0,
@@ -1511,6 +1524,7 @@ def train_one_epoch(
             step_consistency_temperature=step_consistency_temperature,
             learned_halt_loss_weight=learned_halt_loss_weight,
             learned_halt_confidence_threshold=learned_halt_confidence_threshold,
+            readout_entropy_weight=readout_entropy_weight,
         )
 
     for batch_index, batch in enumerate(loader):
@@ -1886,6 +1900,10 @@ def main() -> int:
             f"loss_weight={float(args.learned_halt_loss_weight):.4f} "
             f"target_confidence={float(args.learned_halt_confidence_threshold):.4f}"
         )
+    if float(args.readout_entropy_weight) > 0:
+        if str(args.ctm_readout) not in {"attention", "class_attention", "class_attention_polar"}:
+            raise ValueError("--readout-entropy-weight > 0 requires an attention CTM readout")
+        print(f"[readout_entropy] weight={float(args.readout_entropy_weight):.4f}")
 
     out_dir = Path(args.project) / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1999,6 +2017,7 @@ def main() -> int:
             step_consistency_temperature=float(args.step_consistency_temperature),
             learned_halt_loss_weight=float(args.learned_halt_loss_weight),
             learned_halt_confidence_threshold=float(args.learned_halt_confidence_threshold),
+            readout_entropy_weight=float(args.readout_entropy_weight),
             grad_accum_steps=grad_accum_steps,
             scheduler=scheduler,
             sam_rho=float(args.sam_rho),

@@ -403,6 +403,8 @@ def train_yoloctm_model(config: dict[str, Any], run_name: str, resume_checkpoint
         str(ctm_config.get("learned_halt_loss_weight", 0.0)),
         "--learned-halt-confidence-threshold",
         str(ctm_config.get("learned_halt_confidence_threshold", 0.9)),
+        "--readout-entropy-weight",
+        str(ctm_config.get("readout_entropy_weight", 0.0)),
         "--loss",
         str(ctm_config.get("loss", "weighted_ce")),
         "--label-smoothing",
