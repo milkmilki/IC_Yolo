@@ -818,3 +818,12 @@ classifier_cbr_start_epoch: 7
 ```
 
 This keeps the current best architecture and margin, but adds a tiny deferred classifier-boundary regularizer. It is a qualitatively different class-boundary objective from margin tuning: the goal is to regularize classifier geometry without changing inference parameters, distillation, data split, or the 10-epoch validation-only protocol.
+
+Launched on 2026-06-07 05:04 +08:00:
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr005_tau04_e10_20260607_050437
+task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR005
+initial health: epoch 1 progressing, GPU active
+note: scheduled task disabled after manual start to avoid duplicate relaunch
+```
