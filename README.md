@@ -149,6 +149,10 @@ Independent external benchmarks such as MixedWM38 require a separately declared
 label-mapping or mixed-defect evaluation protocol; they should not be silently
 substituted for the WM811K held-out split.
 
+Before any external wafer benchmark evaluation, run the metadata-only audit
+described in `research-wiki/external_wafer_robustness_protocol.md`. The audit
+does not score a model and skips folders named `test` by default.
+
 Set `prepare.enabled: false` in the YAML to reuse the existing prepared dataset
 without regenerating the train/val/test split on every run.
 

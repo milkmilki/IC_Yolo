@@ -22,6 +22,9 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
 
 2. Next direction to prepare:
    - Prefer external-data robustness protocol or validation-only evidence analysis over another immediate readout loss/gate.
+   - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
+   - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
+   - No external wafer benchmark is currently present under `data/`; do not evaluate external performance until dataset placement, metadata audit, and label mapping are committed.
    - The class-attention mean-blend run is completed and discarded; it helped Scratch but damaged Near-full, Edge-Loc, and Center, so do not continue the mean-fallback/gating direction without a stronger class-conditional rationale.
 
 ## Do Not Rerun

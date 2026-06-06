@@ -296,6 +296,9 @@ Keep it short and operational.
   - the local workspace currently contains only `MIR-WM811K` and prepared `wm811k_cls`; no independent wafer-map dataset is present.
   - candidate external benchmark: `MixedWM38`, reported as an independent public wafer-map dataset with `38,015` maps spanning normal, eight single-defect, and twenty-nine mixed-defect patterns in Micromachines 2024 (`https://www.mdpi.com/2072-666X/15/7/836`) and used alongside WM811K in WMDiff (`https://www.sciencedirect.com/science/article/pii/S095741742403001X`).
   - do not treat MixedWM38 as an interchangeable WM811K test split: its mixed-pattern label space needs a declared mapping or multi-label external-evaluation protocol before any performance claim.
+  - 2026-06-06 update: added `scripts/audit_external_wafer_dataset.py` and `research-wiki/external_wafer_robustness_protocol.md`.
+  - the audit is metadata-only, compares external label folders against WM811K class names, and skips folders named `test` by default to avoid accidental test feedback.
+  - next external-data step is to place a candidate dataset under `data/external/<dataset>` and commit the audit plus label-semantics mapping before any frozen-checkpoint scoring.
 
 ## Practical workflow
 
