@@ -15,6 +15,7 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
 
 1. Class-specific attention entropy:
    - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_entropy_readout.yaml`
+   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_entropy_readout_tau04_e10_20260606_160948`
    - Single factor over class attention: add a small training-only entropy minimization loss on class-specific CTM readout weights.
    - Rationale: polar positional bias hurt validation macro F1, but class-specific readout remains the best no-distillation architecture. The next readout-side test should encourage sharper token evidence without adding step-logit losses, distillation, coordinate priors, or inference-time parameters.
 

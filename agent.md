@@ -383,3 +383,5 @@ Keep it short and operational.
   - single factor: start from the current best class-specific attention readout and add a small training-only normalized entropy penalty (`readout_entropy_weight: 0.01`) on attention weights.
   - rationale: class-specific readout is the current validation-only no-distillation best, while shared attention and polar bias failed. The next readout-side test should encourage sharper class token evidence without touching CTM step logits, using distillation, adding coordinate priors, reading test, or changing inference-time parameters.
   - current keep/discard threshold remains validation macro F1 `0.9115232889273587`.
+  - launched on 2026-06-06 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_entropy_readout_tau04_e10_20260606_160948` via scheduled task `WM811K_AutoResearch_ClassAttentionEntropy` after `--check-config` and `py_compile` passed.
+  - current run-local recovery wrapper: `scripts/run_stepcond_class_attention_entropy_readout.cmd`.
