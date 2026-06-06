@@ -892,3 +892,12 @@ keep_val_macro_f1_min: 0.9133844769616716
 ```
 
 This is the upper-side bracket for the CBR strength. If it fails to beat `0.9133844769616716`, stop CBR weight tuning and move to evidence/robustness or a qualitatively different structural idea.
+
+Launched on 2026-06-07 07:03 +08:00:
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr020_tau04_e10_20260607_070334
+task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR020
+initial health: epoch 1 progressing, GPU active
+note: scheduled task disabled after manual start to avoid duplicate relaunch
+```
