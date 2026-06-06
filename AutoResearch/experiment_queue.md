@@ -13,18 +13,16 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
 
 ## Active / Next Runs
 
-1. Class-attention mean-blend readout:
-   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_blend_readout.yaml`
-   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_blend_readout_tau04_e10_20260606_190418`
-   - Single factor over current best: add one learnable gate per class to blend class-specific attention evidence with mean CTM pooling before the class logit.
-   - Rationale: validation-only class deltas show class attention improves Edge-Loc/Center/Loc but slightly hurts Scratch/Near-full/Donut; a per-class mean fallback may preserve spatial gains while protecting fragile classes.
-
-2. Validation-only evidence package for the current best:
+1. Validation-only evidence package for the current best:
    - Current best checkpoint: `runs/classify/autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126/best_yoloctm.pt`
    - Generated ablation tables at `runs/diagnostics/ablation_table_nodistill`.
    - Generated class-delta reports at `runs/diagnostics/class_delta_class_attention_vs_stepcond`.
    - Generated balanced readout evidence figures at `runs/diagnostics/class_attention_readout_val_figures_balanced` using `--split val --per-class-samples 24`; the selected cases cover all 9 classes.
    - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
+
+2. Next direction to prepare:
+   - Prefer external-data robustness protocol or validation-only evidence analysis over another immediate readout loss/gate.
+   - The class-attention mean-blend run is completed and discarded; it helped Scratch but damaged Near-full, Edge-Loc, and Center, so do not continue the mean-fallback/gating direction without a stronger class-conditional rationale.
 
 ## Do Not Rerun
 
@@ -38,6 +36,7 @@ These 2026-06-05 candidates are already completed and recorded:
 - `stepcond_class_attention_readout`
 - `stepcond_class_attention_polar_readout`
 - `stepcond_class_attention_entropy_readout`
+- `stepcond_class_attention_blend_readout`
 
 ## Evidence Package Commands
 

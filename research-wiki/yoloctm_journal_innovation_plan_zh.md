@@ -610,3 +610,21 @@ The first readout figure export used sequential `--max-samples 256` and only sel
 The validation-only class delta indicates that class-specific attention readout improves Edge-Loc, Center, and Loc, while slightly reducing F1 on Scratch, Near-full, and Donut. The next single-factor candidate is therefore `class_attention_blend`: one learnable gate per class mixes class-attended CTM evidence with the original mean-pooled CTM feature before the class logit.
 
 This keeps the useful class-specific spatial evidence path but gives fragile classes a fallback to stable mean evidence. The protocol remains no-distillation, 10 epochs, validation-only screening, `test.enabled: false`, and threshold `0.9115232889273587`.
+
+## 2026-06-06 supplement: Class-Attention Mean-Blend Result
+
+```text
+config: AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_blend_readout.yaml
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_blend_readout_tau04_e10_20260606_190418
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.981923
+val macro P/R/F1: 0.912642 / 0.901655 / 0.906733
+threshold: 0.9115232889273587
+test: disabled
+```
+
+The class-delta report versus the current best shows macro F1 `-0.0047899818026686525` and accuracy `-0.00046253469010182346`. The blend fallback improved Scratch F1 by `+0.021519`, but damaged Near-full `-0.045455`, Edge-Loc `-0.009855`, and Center `-0.008465`.
+
+Interpretation: the fallback gate did what it was meant to do for Scratch, but it also weakened the location-sensitive gains that made class-specific attention useful. The immediate readout-loss/gating family is now mostly exhausted: shared attention, polar bias, entropy sharpening, and mean blend all failed to beat the plain class-specific attention readout. The next step should favor external-data robustness or deeper validation-only evidence analysis rather than another small readout regularizer.

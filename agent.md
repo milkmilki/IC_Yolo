@@ -404,3 +404,6 @@ Keep it short and operational.
   - `py_compile` and `--check-config` passed on 2026-06-06.
   - launched on 2026-06-06 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_blend_readout_tau04_e10_20260606_190418` via scheduled task `WM811K_AutoResearch_ClassAttentionBlend`.
   - current run-local recovery wrapper: `scripts/run_stepcond_class_attention_blend_readout.cmd`.
+  - result on 2026-06-06: discard, params `10.527M`, val acc `0.981923`, macro P/R/F1 `0.912642 / 0.901655 / 0.906733`; no test metrics generated.
+  - class delta vs current best: macro F1 `-0.004790`, accuracy `-0.000463`. Scratch improved by `+0.0215` F1, but Near-full `-0.0455`, Edge-Loc `-0.0099`, and Center `-0.0085` drove the discard.
+  - interpretation: per-class mean fallback/gating partially helps Scratch but weakens the location-sensitive gains that made class-specific attention useful. Do not continue this fallback/gating direction without a stronger class-conditional rationale.
