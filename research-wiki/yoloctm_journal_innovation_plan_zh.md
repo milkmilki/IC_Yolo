@@ -511,3 +511,29 @@ best_val_macro_f1: 0.896199
 ```
 
 Interpretation: replacing mean CTM token readout with a single shared attention query did not improve the kept step-conditioned residual CTM. The run kept reasonable recall but lost too much macro precision, especially on the harder minority/localization classes. This suggests the readout-side idea is still worth testing, but the shared query is too blunt. The next queued single-factor candidate is class-specific attention readout, initialized so it starts equivalent to mean pooling and can then specialize token evidence per defect class.
+
+## 2026-06-06 supplement: Step-Conditioned CTM + Class-Specific Attention Readout
+
+```text
+config: AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_readout.yaml
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126
+status: keep
+params: 10.527M
+epochs: 10
+val acc: 0.982385
+val macro P/R/F1: 0.916058 / 0.908026 / 0.911523
+previous threshold: 0.910745916167499
+new threshold: 0.9115232889273587
+test: disabled
+```
+
+Best checkpoint was epoch 10:
+
+```text
+best_val_acc: 0.982385
+best_val_macro_f1: 0.911584
+val_adaptive_avg_steps: 4.152
+val_adaptive_max_step_fraction: 0.076
+```
+
+Interpretation: class-specific attention readout is the first readout-side variant to improve the kept step-conditioned CTM. Unlike the shared-query attention readout, it lets each class query the recurrent token field with its own zero-initialized query, starting from mean-pooling behavior and then specializing spatial evidence. The improvement is small but protocol-valid under the 10-epoch, no-distillation, validation-only rule. It supports the paper direction that the CTM trajectory should remain unconstrained across steps, while the readout should become class-aware.

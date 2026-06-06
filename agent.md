@@ -356,6 +356,10 @@ Keep it short and operational.
   - implementation: `class_readout_query` has one learned query per class and starts from zero, so initial attention is uniform and the CTM logits begin equivalent to mean pooling; training can then specialize token evidence per class. Generic auxiliary heads still receive mean-pooled CTM features.
   - launched on 2026-06-06 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135044` via scheduled task `WM811K_AutoResearch_ClassAttention` after `--check-config` passed and GPU had no training process.
   - current run-local recovery wrapper: `scripts/run_stepcond_class_attention_readout.cmd`.
+  - actual run directory created by timestamped config: `autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126`.
+  - result after validation-only metrics backfill on 2026-06-06: keep, params `10.527M`, val acc `0.982385`, macro P/R/F1 `0.916058 / 0.908026 / 0.911523`; no test metrics generated.
+  - this is the new eligible no-distillation track best, improving over `stepcond_adaptive` by about `+0.000777` val macro F1. The gain is precision-led and improves Scratch F1 to `0.8412` while keeping Loc F1 `0.8299`.
+  - current future-screening threshold for the eligible no-distillation track is now validation macro F1 `0.9115232889273587`.
   - diagnostics: the model now caches detached `last_readout_weights` for shared attention readout and `last_class_readout_weights` for class-specific readout, enabling later validation-only export of per-class CTM token evidence maps without changing training loss or inference outputs.
   - tooling: `scripts/export_yoloctm_readout_maps.py` exports validation-only readout evidence (`summary.json`, `samples.json`, and per-sample compressed weight arrays) from a YoloCTM checkpoint, and explicitly rejects `--split test`.
   - visualization: `scripts/visualize_yoloctm_readout_maps.py` renders those validation-only exports into PNG overlays plus `index.json`, enabling paper/debug figures for shared or class-specific CTM token evidence while refusing exports marked as test split.

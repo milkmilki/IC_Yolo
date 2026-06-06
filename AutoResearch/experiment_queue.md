@@ -6,26 +6,14 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
 
 ## Current Best
 
-- Run: `autoresearch_yoloctm_nodistill_stepcond_adaptive_tau04_e10_20260604_175603`
-- Validation macro F1: `0.910745916167499`
+- Run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126`
+- Validation macro F1: `0.9115232889273587`
 - Protocol: no distillation, 10 epochs, validation-only screening, `test.enabled: false`
-- Main idea: step-conditioned adaptive CTM thought steps on top of residual YOLO feature fusion.
+- Main idea: step-conditioned adaptive CTM thought steps on top of residual YOLO feature fusion, with class-specific CTM token attention readout.
 
 ## Active / Next Runs
 
-1. Resume or finish shared attention readout:
-   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_attention_readout.yaml`
-   - Existing interrupted run: `runs/classify/autoresearch_yoloctm_nodistill_stepcond_attention_readout_tau04_e10_20260605_220639`
-   - Resume checkpoint: `last_yoloctm.pt` in that run directory
-   - Single factor: CTM readout `mean -> attention`
-   - Notes: machine reboot already logged in `AutoResearch/reboot_events.tsv`; resume should use the run-local config to avoid creating a duplicate timestamped run.
-
-2. Class-specific attention readout:
-   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_readout.yaml`
-   - Single factor: CTM readout `mean/shared -> class_attention`
-   - Rationale: each defect class gets its own CTM token evidence query without step-logit losses.
-
-3. Polar class-specific attention readout:
+1. Polar class-specific attention readout:
    - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_polar_readout.yaml`
    - Single factor over class attention: add zero-initialized per-class polar coordinate bias to CTM token readout.
    - Rationale: class-wise deltas show `stepcond_adaptive` improves Scratch/Donut/Edge-Ring/Random but loses Edge-Loc and Loc, so the next readout-side idea should help location-sensitive classes without constraining the CTM thought trajectory.
@@ -38,6 +26,8 @@ These 2026-06-05 candidates are already completed and recorded:
 - `stepcond_learnedhalt`
 - `stepcond_topology_gate`
 - `stepcond_consistency`
+- `stepcond_attention_readout`
+- `stepcond_class_attention_readout`
 
 ## Evidence Package Commands
 
@@ -73,7 +63,7 @@ D:\anaconda3\envs\pcb_yolo\python.exe scripts\run_yoloctm_readout_figure_pipelin
 
 ## Run Gating
 
-- Before GPU training: apply `nvidia-smi -pl 400` and `nvidia-smi -lgc 300,1200`.
+- Before GPU training: do not set power limits or lock GPU clocks; use the default GPU policy.
 - If GPU compute apps show only desktop/browser/remote-control graphics processes and Python process status cannot be confirmed, do not start training.
 - If an existing YoloCTM Python training process is active and making progress, monitor only; do not duplicate a run.
 - If a machine reboot happens, append `AutoResearch/reboot_events.tsv` with the boot time and candidate-specific reboot count.
