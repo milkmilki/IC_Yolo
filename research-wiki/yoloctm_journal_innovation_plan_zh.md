@@ -864,3 +864,31 @@ task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010
 initial health: epoch 1 progressing, GPU active
 note: scheduled task disabled after manual start to avoid duplicate relaunch
 ```
+
+### Result: keep
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_tau04_e10_20260607_060435
+status: keep
+params: 10.527M
+epochs: 10
+val acc: 0.982231
+val macro P/R/F1: 0.916222 / 0.911520 / 0.913384
+threshold: 0.9131313775284673
+test: disabled
+```
+
+Interpretation: increasing CBR from `0.005` to `0.01` produces another validation-only gain, mostly by improving macro precision while recall drops relative to `0.005`. This remains promising but close enough that one upper-side check is warranted before stopping small weight tuning.
+
+## 2026-06-07 next candidate: Class-Attention LDAM-DRW + CBR 0.02
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr020.yaml
+loss: ldam_drw
+ldam_max_margin: 0.1
+classifier_cbr_weight: 0.02
+classifier_cbr_start_epoch: 7
+keep_val_macro_f1_min: 0.9133844769616716
+```
+
+This is the upper-side bracket for the CBR strength. If it fails to beat `0.9133844769616716`, stop CBR weight tuning and move to evidence/robustness or a qualitatively different structural idea.
