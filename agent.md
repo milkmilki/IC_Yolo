@@ -447,3 +447,10 @@ Keep it short and operational.
   - single factor over the completed LDAM run: reduce `ldam_max_margin` from `0.2` to `0.1`; keep architecture, schedule, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
   - if this also fails to beat `0.9115232889273587`, stop LDAM margin tuning and move to external robustness/evidence or a qualitatively different class-boundary objective.
   - launched on 2026-06-07 03:01 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_tau04_e10_20260607_030102` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM01`; initial health check showed epoch 1 progressing, `[ldam] max_margin=0.1000 starts at epoch 7`, and GPU active.
+  - result on 2026-06-07: keep, params `10.527M`, val acc `0.982347`, macro P/R/F1 `0.916310 / 0.908782 / 0.912021`; no test metrics generated.
+  - class delta vs the previous class-attention best was generated at `runs/diagnostics/class_delta_ldam_m01_vs_class_attention`; macro F1 improved by `+0.000497`, driven by Scratch `+0.003219`, Edge-Loc `+0.001453`, Center `+0.000730`, and Edge-Ring `+0.000348`, while Loc fell by `-0.001138`.
+  - this is the new no-distillation validation-only best; future keep/discard threshold is `0.912020609416007`.
+- Prepared class-attention LDAM-DRW margin-0.05 follow-up on 2026-06-07:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m005.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m005.cmd`.
+  - single factor over the new best: reduce `ldam_max_margin` from `0.1` to `0.05`; keep architecture, `ldam_start_epoch=7`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+  - if margin `0.05` does not beat `0.912020609416007`, stop LDAM margin tuning and move to external robustness/evidence or a qualitatively different class-boundary objective.

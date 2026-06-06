@@ -735,3 +735,50 @@ ldam_start_epoch: 7
 ```
 
 This is a narrow margin-strength ablation after the near-miss `0.2` run, not a new architecture. It remains no-distillation, 10 epochs, validation-only, and no test access.
+
+### Result: keep
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_tau04_e10_20260607_030102
+status: keep
+params: 10.527M
+epochs: 10
+val acc: 0.982347
+val macro P/R/F1: 0.916310 / 0.908782 / 0.912021
+previous threshold: 0.9115232889273587
+new threshold: 0.912020609416007
+test: disabled
+```
+
+Training history:
+
+```text
+best_val_acc: 0.982347
+best_val_macro_f1: 0.912021
+val_adaptive_avg_steps: 4.151
+val_adaptive_max_step_fraction: 0.075
+```
+
+Validation-only class deltas against the previous class-attention best:
+
+```text
+Scratch F1:   +0.003219
+Edge-Loc F1:  +0.001453
+Center F1:    +0.000730
+Edge-Ring F1: +0.000348
+Loc F1:       -0.001138
+none F1:      -0.000136
+```
+
+Interpretation: a mild LDAM-DRW margin improves class-boundary behavior without changing inference parameters. The gain is small but protocol-valid and comes mostly from defect classes that benefit from slightly stronger minority margins, while `Loc` remains fragile. This makes the current best a stronger journal story: class-specific CTM readout supplies per-class spatial evidence, and mild deferred long-tail margins sharpen boundaries late in training.
+
+## 2026-06-07 next candidate: Class-Attention Readout + LDAM-DRW Margin 0.05
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m005.yaml
+loss: ldam_drw
+ldam_max_margin: 0.05
+ldam_start_epoch: 7
+```
+
+This is the final narrow margin-strength check after the successful `0.1` run. If it fails to beat `0.912020609416007`, stop LDAM margin tuning and move to external robustness/evidence or a qualitatively different class-boundary objective.
