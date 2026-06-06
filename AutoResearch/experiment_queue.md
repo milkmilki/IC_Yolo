@@ -21,7 +21,8 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
 
 2. Next direction to prepare:
-   - Prefer external-data robustness protocol or validation-only evidence analysis over another immediate readout loss/gate.
+   - Next prepared run: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_halt95.yaml`.
+   - Single factor: keep the current best class-specific attention architecture and change only `adaptive_confidence_threshold` from `0.90` to `0.95`, so lower-confidence samples take more CTM thought steps.
    - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
    - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
    - No external wafer benchmark is currently present under `data/`; do not evaluate external performance until dataset placement, metadata audit, and label mapping are committed.

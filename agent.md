@@ -299,6 +299,11 @@ Keep it short and operational.
   - 2026-06-06 update: added `scripts/audit_external_wafer_dataset.py` and `research-wiki/external_wafer_robustness_protocol.md`.
   - the audit is metadata-only, compares external label folders against WM811K class names, and skips folders named `test` by default to avoid accidental test feedback.
   - next external-data step is to place a candidate dataset under `data/external/<dataset>` and commit the audit plus label-semantics mapping before any frozen-checkpoint scoring.
+- Prepared adaptive-threshold follow-up on 2026-06-06:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_halt95.yaml`.
+  - single factor over the current best: keep step-conditioned residual CTM and class-specific attention readout, change only `adaptive_confidence_threshold` from `0.90` to `0.95`.
+  - rationale: previous readout-loss/gate variants are exhausted, but the user-requested CTM behavior of letting low-confidence samples take more thought steps is still worth testing directly on the current best architecture.
+  - protocol remains no distillation, fixed 10 epochs, validation-only screening, `test.enabled: false`, and keep/discard threshold `0.9115232889273587`.
 
 ## Practical workflow
 
