@@ -21,11 +21,11 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
 
 2. Next active run:
-   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020428`.
-   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam.yaml`.
-   - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam.cmd`.
-   - Single factor: keep the current best class-specific attention architecture and change only the training loss from `weighted_ce` to deferred LDAM-DRW (`loss: ldam_drw`, `ldam_max_margin: 0.2`, `ldam_start_epoch: 7`).
-   - Rationale: `halt95` and `min5` showed that extra inference thought steps change compute but not the official validation decision boundary. The next useful pressure should target long-tail class boundaries during training, not halting thresholds.
+   - Prepared config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01.yaml`.
+   - Planned run name: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_tau04_e10`.
+   - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam_m01.cmd`.
+   - Single factor over the completed LDAM-DRW run: keep the current best architecture and LDAM-DRW schedule, but reduce `ldam_max_margin` from `0.2` to `0.1`.
+   - Rationale: `ldam_max_margin=0.2` finished close to the current best but below it (`0.910850` vs `0.911523`), suggesting boundary pressure may be useful but too strong. A milder margin is the only follow-up in this LDAM branch before moving to external robustness or non-loss evidence.
    - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
    - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
    - No external wafer benchmark is currently present under `data/`; do not evaluate external performance until dataset placement, metadata audit, and label mapping are committed.
@@ -33,7 +33,7 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - The class-attention halt95 run is completed and discarded/equal-to-best; it increased average thought steps but did not exceed the current validation threshold.
    - The class-attention min5 run is completed and discarded/equal-to-best; it forced average validation thought steps to about `5.076` but did not exceed the current validation threshold.
    - First LDAM launch attempt `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020207` failed before epoch 1 because the config used invalid loss name `ldam`; corrected to the training script's `ldam_drw`.
-   - Relaunched corrected LDAM-DRW on 2026-06-07 02:04 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020428`; initial health check showed epoch 1 progressing and GPU active.
+   - Relaunched corrected LDAM-DRW on 2026-06-07 02:04 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020428`; result: discard, val macro F1 `0.9108497579599639`.
 
 ## Do Not Rerun
 
@@ -50,6 +50,7 @@ These 2026-06-05 candidates are already completed and recorded:
 - `stepcond_class_attention_blend_readout`
 - `stepcond_class_attention_halt95`
 - `stepcond_class_attention_min5`
+- `stepcond_class_attention_ldam`
 
 ## Evidence Package Commands
 

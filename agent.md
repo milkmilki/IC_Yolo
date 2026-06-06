@@ -440,3 +440,9 @@ Keep it short and operational.
   - rationale: min5/halt95 show inference-time extra thought steps change compute but not official validation decisions. LDAM tests whether class-boundary pressure during late training can improve long-tail macro F1 while keeping the same architecture, no distillation, 10 epochs, and no test access.
   - first launch attempt `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020207` failed before epoch 1 because the training script expects `loss=ldam_drw`, not `loss=ldam`; recorded as a crash/config row and corrected before relaunch.
   - relaunched corrected LDAM-DRW on 2026-06-07 02:04 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020428` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAM`; initial health check showed epoch 1 progressing, `[ldam] max_margin=0.2000 starts at epoch 7`, and GPU active.
+  - result on 2026-06-07: discard, params `10.527M`, val acc `0.982077`, macro P/R/F1 `0.914679 / 0.908030 / 0.910850`; no test metrics generated.
+  - interpretation: deferred LDAM-DRW with margin `0.2` is close but still below the class-attention best. It lowers precision slightly without improving recall, so try exactly one milder margin follow-up before leaving the LDAM branch.
+- Prepared class-attention LDAM-DRW margin-0.1 follow-up on 2026-06-07:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m01.cmd`.
+  - single factor over the completed LDAM run: reduce `ldam_max_margin` from `0.2` to `0.1`; keep architecture, schedule, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+  - if this also fails to beat `0.9115232889273587`, stop LDAM margin tuning and move to external robustness/evidence or a qualitatively different class-boundary objective.

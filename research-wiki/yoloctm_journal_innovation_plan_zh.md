@@ -700,3 +700,38 @@ ldam_start_epoch: 7
 Rationale: the current best is precision-led but still fragile on long-tail class boundaries. LDAM-style margins are a direct long-tailed recognition prior and act during late training, not at inference. This is cleaner than further halting sweeps: no distillation, no test access, no additional inference parameters, same 10-epoch budget, and validation-only keep/discard threshold `0.9115232889273587`.
 
 Operational note: the first launch used the shorthand `loss: ldam`, but the training script's accepted mode name is `ldam_drw`. That pre-epoch config failure was recorded separately, and the candidate config was corrected before relaunch.
+
+### Result: discard
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020428
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.982077
+val macro P/R/F1: 0.914679 / 0.908030 / 0.910850
+threshold: 0.9115232889273587
+test: disabled
+```
+
+Training history:
+
+```text
+best_val_acc: 0.982077
+best_val_macro_f1: 0.910850
+val_adaptive_avg_steps: 4.151
+val_adaptive_max_step_fraction: 0.075
+```
+
+Interpretation: LDAM-DRW with margin `0.2` is close to the current best but still below it. The main effect is a small precision drop without a recall gain, so the margin appears too strong for the already class-aware readout. One controlled follow-up is justified: reduce `ldam_max_margin` to `0.1` while keeping the architecture and schedule fixed. If that also fails, LDAM margin tuning should stop.
+
+## 2026-06-07 next candidate: Class-Attention Readout + LDAM-DRW Margin 0.1
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01.yaml
+loss: ldam_drw
+ldam_max_margin: 0.1
+ldam_start_epoch: 7
+```
+
+This is a narrow margin-strength ablation after the near-miss `0.2` run, not a new architecture. It remains no-distillation, 10 epochs, validation-only, and no test access.
