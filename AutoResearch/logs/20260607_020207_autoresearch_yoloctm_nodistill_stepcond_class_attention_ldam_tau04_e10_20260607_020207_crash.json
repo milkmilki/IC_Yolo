@@ -1,0 +1,29 @@
+{
+  "row": {
+    "timestamp": "2026-06-07T02:02:07",
+    "status": "crash",
+    "algorithm": "yoloctm",
+    "run_dir": "E:\\Cjn\\PCB_Yolo\\runs\\classify\\autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020207",
+    "params_m": "",
+    "epochs": "10",
+    "imgsz": "224",
+    "batch": "64",
+    "device": "0",
+    "model_summary": "yolo26m-cls.pt | ctm(d=96,s=6,drop=0.1,pow=0.5) | fusion=residual",
+    "val_acc": "",
+    "val_macro_p": "",
+    "val_macro_r": "",
+    "val_macro_f1": "",
+    "test_acc": "",
+    "test_macro_p": "",
+    "test_macro_r": "",
+    "test_macro_f1": "",
+    "description": "Pre-epoch config failure: training script rejected loss='ldam'; valid LDAM mode is loss='ldam_drw'. No checkpoint or validation/test metrics generated; relaunching corrected same candidate."
+  },
+  "error": {
+    "stage": "train",
+    "type": "argparse_invalid_choice",
+    "message": "argument --loss: invalid choice: 'ldam' (choose from 'weighted_ce', 'balanced_softmax', 'ldam_drw')"
+  },
+  "test_accessed": false
+}

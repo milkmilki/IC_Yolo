@@ -692,9 +692,11 @@ AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam.yaml
 It keeps the current best architecture unchanged and changes only the training loss:
 
 ```text
-loss: ldam
+loss: ldam_drw
 ldam_max_margin: 0.2
 ldam_start_epoch: 7
 ```
 
 Rationale: the current best is precision-led but still fragile on long-tail class boundaries. LDAM-style margins are a direct long-tailed recognition prior and act during late training, not at inference. This is cleaner than further halting sweeps: no distillation, no test access, no additional inference parameters, same 10-epoch budget, and validation-only keep/discard threshold `0.9115232889273587`.
+
+Operational note: the first launch used the shorthand `loss: ldam`, but the training script's accepted mode name is `ldam_drw`. That pre-epoch config failure was recorded separately, and the candidate config was corrected before relaunch.

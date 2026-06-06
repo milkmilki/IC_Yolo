@@ -24,7 +24,7 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Prepared config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam.yaml`.
    - Planned run name: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10`.
    - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam.cmd`.
-   - Single factor: keep the current best class-specific attention architecture and change only the training loss from `weighted_ce` to deferred LDAM (`ldam_max_margin: 0.2`, `ldam_start_epoch: 7`).
+   - Single factor: keep the current best class-specific attention architecture and change only the training loss from `weighted_ce` to deferred LDAM-DRW (`loss: ldam_drw`, `ldam_max_margin: 0.2`, `ldam_start_epoch: 7`).
    - Rationale: `halt95` and `min5` showed that extra inference thought steps change compute but not the official validation decision boundary. The next useful pressure should target long-tail class boundaries during training, not halting thresholds.
    - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
    - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
@@ -32,6 +32,7 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - The class-attention mean-blend run is completed and discarded; it helped Scratch but damaged Near-full, Edge-Loc, and Center, so do not continue the mean-fallback/gating direction without a stronger class-conditional rationale.
    - The class-attention halt95 run is completed and discarded/equal-to-best; it increased average thought steps but did not exceed the current validation threshold.
    - The class-attention min5 run is completed and discarded/equal-to-best; it forced average validation thought steps to about `5.076` but did not exceed the current validation threshold.
+   - First LDAM launch attempt `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020207` failed before epoch 1 because the config used invalid loss name `ldam`; corrected to the training script's `ldam_drw`.
 
 ## Do Not Rerun
 

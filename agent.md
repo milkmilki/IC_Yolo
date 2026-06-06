@@ -436,5 +436,6 @@ Keep it short and operational.
   - dynamic-depth effect: forcing minimum steps from `4` to `5` raised average validation thought steps to about `5.076`, yet the official validation decision boundary was unchanged. Do not continue sweeping `adaptive_min_steps` or confidence thresholds without a new halting mechanism.
 - Prepared class-attention LDAM follow-up on 2026-06-07:
   - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam.cmd`.
-  - single factor: keep current best class-specific attention readout and change only training loss from `weighted_ce` to deferred LDAM (`ldam_max_margin=0.2`, `ldam_start_epoch=7`).
+  - single factor: keep current best class-specific attention readout and change only training loss from `weighted_ce` to deferred LDAM-DRW (`loss=ldam_drw`, `ldam_max_margin=0.2`, `ldam_start_epoch=7`).
   - rationale: min5/halt95 show inference-time extra thought steps change compute but not official validation decisions. LDAM tests whether class-boundary pressure during late training can improve long-tail macro F1 while keeping the same architecture, no distillation, 10 epochs, and no test access.
+  - first launch attempt `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_tau04_e10_20260607_020207` failed before epoch 1 because the training script expects `loss=ldam_drw`, not `loss=ldam`; recorded as a crash/config row and corrected before relaunch.

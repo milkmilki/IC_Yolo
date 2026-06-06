@@ -49,7 +49,7 @@ model:
     step_consistency_temperature: 1.0
     learned_halt_loss_weight: 0.0
     learned_halt_confidence_threshold: 0.9
-    loss: ldam
+    loss: ldam_drw
     label_smoothing: 0.0
     ldam_max_margin: 0.2
     ldam_start_epoch: 7
@@ -114,4 +114,4 @@ logging:
   autoresearch: true
   status: auto
   keep_val_macro_f1_min: 0.9115232889273587
-  description: "Deep non-distilled candidate: keep the best step-conditioned residual CTM with class-specific attention readout and change only the training loss from weighted CE to deferred LDAM margins, testing whether long-tail class-boundary pressure improves validation macro F1 without distillation, extra steps, or test access."
+  description: "Deep non-distilled candidate: keep the best step-conditioned residual CTM with class-specific attention readout and change only the training loss from weighted CE to deferred LDAM-DRW margins, testing whether long-tail class-boundary pressure improves validation macro F1 without distillation, extra steps, or test access."
