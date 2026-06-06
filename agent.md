@@ -389,3 +389,10 @@ Keep it short and operational.
   - training history recorded an internal best `best_val_macro_f1=0.911584` at epoch `10`, but the official validation metrics with the predeclared `prior_logit_tau=0.4` match the existing class-attention best exactly and therefore do not clear the strict `0.9115232889273587` threshold.
   - interpretation: entropy sharpening did not produce a protocol-valid improvement over class-specific attention readout. The current eligible no-distillation best remains `autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126`.
   - next step: stop adding readout losses for the moment; build a validation-only evidence package around the kept class-attention model and only then decide whether another structural candidate is justified.
+- Validation-only evidence package on 2026-06-06:
+  - generated `runs/diagnostics/ablation_table_nodistill` from `AutoResearch/results.tsv`; it reports the best val-only no-distill run as `autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126` with val macro F1 `0.9115232889273587`.
+  - generated `runs/diagnostics/class_delta_class_attention_vs_stepcond`, comparing the kept class-attention readout against `stepcond_adaptive`; macro F1 delta is `+0.0007773727598596736` and accuracy delta is `+0.0006938020351526797`, both validation-only.
+  - first readout figure export with the default sequential `--max-samples 256` selected only one class because the validation folder ordering is class-major and WM811K is imbalanced.
+  - added `--per-class-samples` to `scripts/export_yoloctm_readout_maps.py` and `scripts/run_yoloctm_readout_figure_pipeline.py`, then generated the balanced evidence package at `runs/diagnostics/class_attention_readout_val_figures_balanced`.
+  - balanced package details: `split=val`, checkpoint `runs/classify/autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126/best_yoloctm.pt`, `per_class_samples=24`, `exported_samples=215`, selected cases cover all `9` classes, and the assembled figure is `readout_figure.png`.
+  - no test metrics or test images were exported.

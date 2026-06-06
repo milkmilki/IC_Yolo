@@ -15,7 +15,9 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
 
 1. Validation-only evidence package for the current best:
    - Current best checkpoint: `runs/classify/autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126/best_yoloctm.pt`
-   - Generate ablation tables, class-delta reports, and readout evidence figures from validation artifacts only.
+   - Generated ablation tables at `runs/diagnostics/ablation_table_nodistill`.
+   - Generated class-delta reports at `runs/diagnostics/class_delta_class_attention_vs_stepcond`.
+   - Generated balanced readout evidence figures at `runs/diagnostics/class_attention_readout_val_figures_balanced` using `--split val --per-class-samples 24`; the selected cases cover all 9 classes.
    - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
 
 ## Do Not Rerun
@@ -60,7 +62,8 @@ D:\anaconda3\envs\pcb_yolo\python.exe scripts\run_yoloctm_readout_figure_pipelin
   --checkpoint runs\classify\<run_name>\best_yoloctm.pt `
   --output-root runs\diagnostics\<run_name>_readout_figures `
   --device cpu `
-  --split val
+  --split val `
+  --per-class-samples 24
 ```
 
 ## Run Gating

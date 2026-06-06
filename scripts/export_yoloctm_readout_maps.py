@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 from torchvision.transforms import InterpolationMode
 
@@ -29,6 +29,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch", type=int, default=64)
     parser.add_argument("--prior-logit-tau", type=float, default=0.4)
     parser.add_argument("--max-samples", type=int, default=256)
+    parser.add_argument(
+        "--per-class-samples",
+        type=int,
+        default=0,
+        help="If positive, export an interleaved validation subset with up to N samples per class.",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     return parser.parse_args()
 
@@ -51,12 +57,36 @@ def polar_coordinates(height: int, width: int) -> np.ndarray:
     return np.stack([xx, yy, radius], axis=-1).reshape(-1, 3).astype(np.float32)
 
 
+def select_sample_indices(dataset: datasets.ImageFolder, max_samples: int, per_class_samples: int) -> list[int]:
+    max_samples = int(max_samples)
+    per_class_samples = int(per_class_samples)
+    if per_class_samples <= 0:
+        return list(range(min(max_samples, len(dataset))))
+
+    by_class: list[list[int]] = [[] for _ in dataset.classes]
+    for index, target in enumerate(dataset.targets):
+        bucket = by_class[int(target)]
+        if len(bucket) < per_class_samples:
+            bucket.append(index)
+
+    selected: list[int] = []
+    for offset in range(per_class_samples):
+        for bucket in by_class:
+            if offset < len(bucket):
+                selected.append(bucket[offset])
+                if len(selected) >= max_samples:
+                    return selected
+    return selected
+
+
 def main() -> int:
     args = parse_args()
     if str(args.split).lower() == "test":
         raise ValueError("This diagnostic is validation-only by policy; do not export test readout maps.")
     if int(args.max_samples) <= 0:
         raise ValueError("--max-samples must be positive")
+    if int(args.per_class_samples) < 0:
+        raise ValueError("--per-class-samples must be non-negative")
 
     transform = transforms.Compose(
         [
@@ -65,7 +95,9 @@ def main() -> int:
         ]
     )
     dataset = datasets.ImageFolder(args.data_root / str(args.split), transform=transform)
-    loader = DataLoader(dataset, batch_size=int(args.batch), shuffle=False, num_workers=0, pin_memory=False)
+    selected_indices = select_sample_indices(dataset, int(args.max_samples), int(args.per_class_samples))
+    export_dataset = Subset(dataset, selected_indices)
+    loader = DataLoader(export_dataset, batch_size=int(args.batch), shuffle=False, num_workers=0, pin_memory=False)
 
     model, checkpoint_classes, device, _criterion = load_yoloctm_checkpoint(args.checkpoint, str(args.device))
     if dataset.classes != checkpoint_classes:
@@ -125,7 +157,7 @@ def main() -> int:
             for offset in range(batch_size):
                 if exported >= int(args.max_samples):
                     break
-                dataset_index = batch_index * int(args.batch) + offset
+                dataset_index = selected_indices[batch_index * int(args.batch) + offset]
                 path, _target = dataset.samples[dataset_index]
                 sample_id = f"{exported:05d}"
                 weight_file = args.output_dir / f"{sample_id}_readout_weights.npz"
@@ -179,6 +211,7 @@ def main() -> int:
         "classes": dataset.classes,
         "model_readout": model_readout,
         "prior_logit_tau": float(args.prior_logit_tau),
+        "per_class_samples": int(args.per_class_samples),
         "exported_samples": exported,
         "note": "Validation-only CTM readout evidence export; test split is intentionally rejected.",
     }

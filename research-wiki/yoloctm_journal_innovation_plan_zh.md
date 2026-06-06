@@ -587,3 +587,20 @@ val_adaptive_max_step_fraction: 0.076
 ```
 
 Interpretation: the official AutoResearch metrics use the predeclared validation prior calibration (`prior_logit_tau=0.4`) and match the existing class-attention best exactly, so this is not a protocol-valid improvement. The entropy penalty did not hurt the main validation report, but it also did not move the selected decision boundary beyond the current best. The next step should be validation-only evidence assembly around the kept class-specific attention model, not another immediate readout loss.
+
+## 2026-06-06 supplement: Validation-Only Evidence Package
+
+Generated evidence artifacts:
+
+```text
+ablation table: runs/diagnostics/ablation_table_nodistill
+class delta: runs/diagnostics/class_delta_class_attention_vs_stepcond
+balanced readout figures: runs/diagnostics/class_attention_readout_val_figures_balanced
+checkpoint: runs/classify/autoresearch_yoloctm_nodistill_stepcond_class_attention_readout_tau04_e10_20260606_135126/best_yoloctm.pt
+split: val
+test: disabled / not exported
+```
+
+The ablation table confirms the current no-distillation validation-only best remains `stepcond_class_attention_readout` with macro F1 `0.9115232889273587`. The class-delta report versus `stepcond_adaptive` shows a small but positive validation gain: macro F1 `+0.0007773727598596736` and accuracy `+0.0006938020351526797`.
+
+The first readout figure export used sequential `--max-samples 256` and only selected one class because the validation folder ordering is class-major under severe WM811K imbalance. To avoid misleading figures, `export_yoloctm_readout_maps.py` and `run_yoloctm_readout_figure_pipeline.py` now support `--per-class-samples`. The balanced figure package used `--per-class-samples 24`, exported 215 validation samples, and selected cases across all 9 classes.

@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch", type=int, default=64)
     parser.add_argument("--prior-logit-tau", type=float, default=0.4)
     parser.add_argument("--max-samples", type=int, default=256)
+    parser.add_argument("--per-class-samples", type=int, default=0)
     parser.add_argument("--class-mode", choices=["pred", "true", "all"], default="pred")
     parser.add_argument("--alpha", type=float, default=0.55)
     parser.add_argument("--per-class-correct", type=int, default=2)
@@ -73,6 +74,8 @@ def main() -> int:
             str(args.prior_logit_tau),
             "--max-samples",
             str(args.max_samples),
+            "--per-class-samples",
+            str(args.per_class_samples),
             "--output-dir",
             str(export_dir),
         ]
