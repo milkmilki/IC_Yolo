@@ -21,11 +21,12 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
 
 2. Next active run:
-   - Prepared config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_logfusion.yaml`.
-   - Planned run name: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_logfusion_tau04_e10`.
+   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_logfusion_tau04_e10_20260607_090408`.
+   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_logfusion.yaml`.
    - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam_m01_cbr010_logfusion.cmd`.
    - Single factor over the current best: keep class-specific attention readout, `ldam_max_margin=0.1`, and `classifier_cbr_weight=0.01`, but enable global `logprob_fusion: true` with `logprob_fusion_init=0.2`.
    - Rationale: classwise expert fusion was too flexible and hurt recall. The next structural test is a conservative single-weight YOLO/CTM log-prob fusion to see whether a restrained perception/thought mixture helps without per-class over-specialization.
+   - Launched on 2026-06-07 09:04 +08:00 via `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010LogFusion`; task was disabled after manual start to avoid a duplicate 23:59 trigger. Initial health check showed epoch 1 progressing, CBR `0.0100`, and GPU active.
    - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
    - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
    - No external wafer benchmark is currently present under `data/`; do not evaluate external performance until dataset placement, metadata audit, and label mapping are committed.

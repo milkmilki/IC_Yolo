@@ -966,3 +966,12 @@ keep_val_macro_f1_min: 0.9133844769616716
 ```
 
 This keeps the current best recipe and replaces classwise fusion with one global learned fusion weight. It is a restrained structural check of YOLO perception versus CTM thought complementarity, still with no distillation and no test access.
+
+Launched on 2026-06-07 09:04 +08:00:
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_logfusion_tau04_e10_20260607_090408
+task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010LogFusion
+initial health: epoch 1 progressing, GPU active
+note: scheduled task disabled after manual start to avoid duplicate relaunch
+```
