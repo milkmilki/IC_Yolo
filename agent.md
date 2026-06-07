@@ -483,3 +483,9 @@ Keep it short and operational.
   - single factor over the current best: enable `expert_fusion: classwise_logprob`, while keeping class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
   - rationale: tests learned per-class complementarity between the clean YOLO perception branch and the CTM thought branch, without using teacher logits or test feedback.
   - launched on 2026-06-07 08:04 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_expert_tau04_e10_20260607_080419` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010Expert`; task was disabled after manual start to avoid a duplicate 23:59 trigger. Initial health check showed epoch 1 progressing and GPU active.
+  - result on 2026-06-07: discard, params `10.527M`, val acc `0.980959`, macro P/R/F1 `0.922638 / 0.900369 / 0.910916`; no test metrics generated.
+  - interpretation: per-class expert fusion over-specialized toward precision and damaged recall; do not continue classwise expert variants immediately.
+- Prepared class-attention LDAM-DRW + CBR 0.01 + global log-prob fusion follow-up on 2026-06-07:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_logfusion.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m01_cbr010_logfusion.cmd`.
+  - single factor over the current best: enable `logprob_fusion: true` with `logprob_fusion_init=0.2`, while keeping class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+  - rationale: a single global YOLO/CTM fusion weight may preserve recall better than classwise expert fusion while still testing perception/thought complementarity.

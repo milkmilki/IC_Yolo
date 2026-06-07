@@ -938,3 +938,31 @@ task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010Expert
 initial health: epoch 1 progressing, GPU active
 note: scheduled task disabled after manual start to avoid duplicate relaunch
 ```
+
+### Result: discard
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_expert_tau04_e10_20260607_080419
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.980959
+val macro P/R/F1: 0.922638 / 0.900369 / 0.910916
+threshold: 0.9133844769616716
+test: disabled
+```
+
+Interpretation: classwise expert fusion raises macro precision but damages macro recall, so the per-class mixture is too flexible for the current validation-only regime. Avoid more classwise expert variants until there is external robustness evidence or a stronger regularization story.
+
+## 2026-06-07 next candidate: Global YOLO/CTM Log-Prob Fusion
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_logfusion.yaml
+logprob_fusion: true
+logprob_fusion_init: 0.2
+classifier_cbr_weight: 0.01
+ldam_max_margin: 0.1
+keep_val_macro_f1_min: 0.9133844769616716
+```
+
+This keeps the current best recipe and replaces classwise fusion with one global learned fusion weight. It is a restrained structural check of YOLO perception versus CTM thought complementarity, still with no distillation and no test access.
