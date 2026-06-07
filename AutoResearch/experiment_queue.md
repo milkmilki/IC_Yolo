@@ -21,11 +21,12 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
 
 2. Next active run:
-   - Prepared config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_expert.yaml`.
-   - Planned run name: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_expert_tau04_e10`.
+   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_expert_tau04_e10_20260607_080419`.
+   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_expert.yaml`.
    - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam_m01_cbr010_expert.cmd`.
    - Single factor over the current best: keep class-specific attention readout, `ldam_max_margin=0.1`, and `classifier_cbr_weight=0.01`, but enable `expert_fusion: classwise_logprob`.
    - Rationale: CBR `0.02` failed, so stop CBR weight tuning. The next structural test is a per-class mixture-of-experts readout that learns when the clean YOLO branch versus the CTM thought branch should dominate.
+   - Launched on 2026-06-07 08:04 +08:00 via `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010Expert`; task was disabled after manual start to avoid a duplicate 23:59 trigger. Initial health check showed epoch 1 progressing, CBR `0.0100`, and GPU active.
    - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
    - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
    - No external wafer benchmark is currently present under `data/`; do not evaluate external performance until dataset placement, metadata audit, and label mapping are committed.
