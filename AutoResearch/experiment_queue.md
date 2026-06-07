@@ -45,6 +45,7 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - LDAM-DRW margin 0.1 + CBR 0.01 + global log-prob fusion completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_logfusion_tau04_e10_20260607_090408`; result: discard, val macro F1 `0.8899943351556002`.
    - LDAM-DRW margin 0.1 + CBR 0.01 + polar spatial encoding completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_polarenc_tau04_e10_20260607_100351`; result: discard, val macro F1 `0.9010680369633918`.
    - LDAM-DRW margin 0.1 + CBR 0.01 + none-aware sampling completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_noneaware075_tau04_e10_20260607_110426`; result: discard, val macro F1 `0.8958599987513993`.
+   - LDAM-DRW margin 0.1 + CBR 0.01 + class weight power 0.6 completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp06_tau04_e10_20260607_121941`; result: discard, val macro F1 `0.8982021938248087`.
 
 ## Do Not Rerun
 
@@ -71,6 +72,7 @@ These 2026-06-05 candidates are already completed and recorded:
 - `stepcond_class_attention_ldam_m01_cbr010_logfusion`
 - `stepcond_class_attention_ldam_m01_cbr010_polarenc`
 - `stepcond_class_attention_ldam_m01_cbr010_noneaware075`
+- `stepcond_class_attention_ldam_m01_cbr010_cwp06`
 
 ## Evidence Package Commands
 

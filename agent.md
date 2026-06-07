@@ -512,3 +512,9 @@ Keep it short and operational.
   - rationale: tests a conservative objective-side imbalance adjustment after sampling-level rebalancing failed.
   - launched on 2026-06-07 12:19 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp06_tau04_e10_20260607_121941` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010CWP06`; task was disabled after manual start to avoid a duplicate 23:59 trigger.
   - active run directory: `runs\classify\autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp06_tau04_e10_20260607_121941`; initial health check showed epoch 1 progressing on GPU.
+  - result on 2026-06-07: discard, params `10.527M`, val acc `0.980728`, macro P/R/F1 `0.898460 / 0.900358 / 0.898202`; no test metrics generated.
+  - interpretation: stronger inverse-frequency weighting is too disruptive and drops far below the current best. Do not continue increasing `class_weight_power`.
+- Prepared class-attention LDAM-DRW + CBR 0.01 + class weight power 0.4 follow-up on 2026-06-07:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_cwp04.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m01_cbr010_cwp04.cmd`.
+  - single factor over the current best: decrease `class_weight_power` from `0.5` to `0.4`; keep natural sampling, architecture, class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+  - rationale: after `0.6` failed badly, test the opposite hypothesis that the current recipe is slightly over-weighting rare classes.

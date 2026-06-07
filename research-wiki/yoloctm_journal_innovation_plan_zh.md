@@ -1086,3 +1086,31 @@ task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010CWP06
 initial health: epoch 1 progressing, GPU active
 note: scheduled task disabled after manual start to avoid duplicate relaunch
 ```
+
+### Result: discard
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp06_tau04_e10_20260607_121941
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.980728
+val macro P/R/F1: 0.898460 / 0.900358 / 0.898202
+threshold: 0.9133844769616716
+test: disabled
+```
+
+Interpretation: raising `class_weight_power` from `0.5` to `0.6` is too aggressive and degrades macro F1 sharply. Do not continue increasing class-weight strength.
+
+## 2026-06-07 next candidate: Class Weight Power 0.4
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_cwp04.yaml
+class_weight_power: 0.4
+train.sampling: natural
+classifier_cbr_weight: 0.01
+ldam_max_margin: 0.1
+keep_val_macro_f1_min: 0.9133844769616716
+```
+
+This is the opposite one-factor check after `0.6` failed: keep architecture and sampler fixed, but reduce inverse-frequency weighting to test whether the current best is slightly over-weighted toward rare classes.
