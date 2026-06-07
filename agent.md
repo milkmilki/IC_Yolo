@@ -490,3 +490,9 @@ Keep it short and operational.
   - single factor over the current best: enable `logprob_fusion: true` with `logprob_fusion_init=0.2`, while keeping class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
   - rationale: a single global YOLO/CTM fusion weight may preserve recall better than classwise expert fusion while still testing perception/thought complementarity.
   - launched on 2026-06-07 09:04 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_logfusion_tau04_e10_20260607_090408` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010LogFusion`; task was disabled after manual start to avoid a duplicate 23:59 trigger. Initial health check showed epoch 1 progressing and GPU active.
+  - result on 2026-06-07: discard, params `10.527M`, val acc `0.976295`, macro P/R/F1 `0.880979 / 0.900721 / 0.889994`; no test metrics generated.
+  - interpretation: global log-prob fusion is much worse than the current best; stop fusion variants for now.
+- Prepared class-attention LDAM-DRW + CBR 0.01 + polar spatial encoding follow-up on 2026-06-07:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_polarenc.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m01_cbr010_polarenc.cmd`.
+  - single factor over the current best: set `spatial_encoding: polar`, while keeping class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+  - rationale: inject wafer radial/angular positional priors into CTM tokens after both fusion variants hurt validation macro F1.

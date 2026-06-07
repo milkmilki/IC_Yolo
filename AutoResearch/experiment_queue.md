@@ -21,12 +21,11 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Rationale: the last three readout-side follow-ups were shared attention discard, polar discard, and entropy discard/equal-to-best. Before adding more losses or priors, inspect what the kept class-specific readout actually attends to and which validation classes drive its gain.
 
 2. Next active run:
-   - Active run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_logfusion_tau04_e10_20260607_090408`.
-   - Config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_logfusion.yaml`.
-   - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam_m01_cbr010_logfusion.cmd`.
-   - Single factor over the current best: keep class-specific attention readout, `ldam_max_margin=0.1`, and `classifier_cbr_weight=0.01`, but enable global `logprob_fusion: true` with `logprob_fusion_init=0.2`.
-   - Rationale: classwise expert fusion was too flexible and hurt recall. The next structural test is a conservative single-weight YOLO/CTM log-prob fusion to see whether a restrained perception/thought mixture helps without per-class over-specialization.
-   - Launched on 2026-06-07 09:04 +08:00 via `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010LogFusion`; task was disabled after manual start to avoid a duplicate 23:59 trigger. Initial health check showed epoch 1 progressing, CBR `0.0100`, and GPU active.
+   - Prepared config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_polarenc.yaml`.
+   - Planned run name: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_polarenc_tau04_e10`.
+   - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam_m01_cbr010_polarenc.cmd`.
+   - Single factor over the current best: keep class-specific attention readout, `ldam_max_margin=0.1`, and `classifier_cbr_weight=0.01`, but set `spatial_encoding: polar`.
+   - Rationale: both classwise and global YOLO/CTM log-prob fusion failed badly. The next structural test injects wafer radial/angular positional priors into CTM tokens while preserving the successful readout/loss recipe.
    - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
    - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
    - No external wafer benchmark is currently present under `data/`; do not evaluate external performance until dataset placement, metadata audit, and label mapping are committed.
@@ -41,6 +40,7 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - LDAM-DRW margin 0.1 + CBR 0.01 completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_tau04_e10_20260607_060435`; result: keep, val macro F1 `0.9133844769616716`.
    - LDAM-DRW margin 0.1 + CBR 0.02 completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr020_tau04_e10_20260607_070334`; result: discard, val macro F1 `0.9128871683813008`.
    - LDAM-DRW margin 0.1 + CBR 0.01 + classwise expert fusion completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_expert_tau04_e10_20260607_080419`; result: discard, val macro F1 `0.9109162034388688`.
+   - LDAM-DRW margin 0.1 + CBR 0.01 + global log-prob fusion completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_logfusion_tau04_e10_20260607_090408`; result: discard, val macro F1 `0.8899943351556002`.
 
 ## Do Not Rerun
 
@@ -64,6 +64,7 @@ These 2026-06-05 candidates are already completed and recorded:
 - `stepcond_class_attention_ldam_m01_cbr010`
 - `stepcond_class_attention_ldam_m01_cbr020`
 - `stepcond_class_attention_ldam_m01_cbr010_expert`
+- `stepcond_class_attention_ldam_m01_cbr010_logfusion`
 
 ## Evidence Package Commands
 

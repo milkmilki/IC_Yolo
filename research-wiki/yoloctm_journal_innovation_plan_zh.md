@@ -975,3 +975,31 @@ task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010LogFusion
 initial health: epoch 1 progressing, GPU active
 note: scheduled task disabled after manual start to avoid duplicate relaunch
 ```
+
+### Result: discard
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_logfusion_tau04_e10_20260607_090408
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.976295
+val macro P/R/F1: 0.880979 / 0.900721 / 0.889994
+threshold: 0.9133844769616716
+test: disabled
+```
+
+Interpretation: global log-prob fusion is far worse than the current best, so YOLO/CTM log-prob fusion is not a good direction under the 10-epoch validation-only protocol. Stop fusion variants for now.
+
+## 2026-06-07 next candidate: Polar Spatial Encoding on Current Best
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_polarenc.yaml
+spatial_encoding: polar
+spatial_encoding_scale_init: 0.05
+classifier_cbr_weight: 0.01
+ldam_max_margin: 0.1
+keep_val_macro_f1_min: 0.9133844769616716
+```
+
+This is a structural wafer-prior test over the current best: add radial/angular token position encoding while keeping the successful class-attention, LDAM, and CBR recipe fixed.
