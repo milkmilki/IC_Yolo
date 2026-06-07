@@ -476,3 +476,9 @@ Keep it short and operational.
   - single factor over the new best: increase `classifier_cbr_weight` from `0.01` to `0.02`, while keeping `ldam_max_margin=0.1`, `classifier_cbr_start_epoch=7`, class-specific attention readout, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
   - if CBR `0.02` fails to beat `0.9133844769616716`, stop small CBR weight tuning and move to qualitatively different evidence/structure work.
   - launched on 2026-06-07 07:03 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr020_tau04_e10_20260607_070334` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM01CBR020`; task was disabled after manual start to avoid a duplicate 23:59 trigger. Initial health check showed epoch 1 progressing, `[cbr] classifier regularization weight=0.0200 power=1.0000 starts at epoch 7`, and GPU active.
+  - result on 2026-06-07: discard, params `10.527M`, val acc `0.982192`, macro P/R/F1 `0.916035 / 0.910665 / 0.912887`; no test metrics generated.
+  - interpretation: CBR `0.02` is worse than `0.01`; stop small CBR weight tuning.
+- Prepared class-attention LDAM-DRW + CBR 0.01 + classwise expert fusion follow-up on 2026-06-07:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_expert.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m01_cbr010_expert.cmd`.
+  - single factor over the current best: enable `expert_fusion: classwise_logprob`, while keeping class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+  - rationale: tests learned per-class complementarity between the clean YOLO perception branch and the CTM thought branch, without using teacher logits or test feedback.

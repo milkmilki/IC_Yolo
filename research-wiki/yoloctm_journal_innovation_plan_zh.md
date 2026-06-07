@@ -901,3 +901,31 @@ task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR020
 initial health: epoch 1 progressing, GPU active
 note: scheduled task disabled after manual start to avoid duplicate relaunch
 ```
+
+### Result: discard
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr020_tau04_e10_20260607_070334
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.982192
+val macro P/R/F1: 0.916035 / 0.910665 / 0.912887
+threshold: 0.9133844769616716
+test: disabled
+```
+
+Interpretation: stronger CBR reduces macro recall and misses the `0.01` best. Stop small CBR weight tuning; the evidence now brackets CBR strength with `0.01` as the current validation-only optimum.
+
+## 2026-06-07 next candidate: Classwise YOLO/CTM Expert Fusion
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_expert.yaml
+expert_fusion: classwise_logprob
+expert_ctm_init: 0.4
+classifier_cbr_weight: 0.01
+ldam_max_margin: 0.1
+keep_val_macro_f1_min: 0.9133844769616716
+```
+
+This is a qualitative structure change over the current best: learn a per-class log-prob mixture between the clean YOLO perception branch and the CTM thought branch. It keeps the 10-epoch, no-distillation, validation-only protocol fixed.
