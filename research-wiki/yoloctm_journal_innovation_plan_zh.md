@@ -1123,3 +1123,31 @@ task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010CWP04
 initial health: epoch 1 progressing, GPU active
 note: scheduled task disabled after manual start to avoid duplicate relaunch
 ```
+
+### Result: keep
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp04_tau04_e10_20260607_132608
+status: keep
+params: 10.527M
+epochs: 10
+val acc: 0.982270
+val macro P/R/F1: 0.925950 / 0.905714 / 0.915464
+threshold: 0.9133844769616716
+test: disabled
+```
+
+Interpretation: weaker inverse-frequency weighting improves the current validation-only no-distillation best. The gain is mostly precision-side, while recall is slightly lower than the CBR 0.01 best.
+
+## 2026-06-07 next candidate: Class Weight Power 0.3
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_cwp03.yaml
+class_weight_power: 0.3
+train.sampling: natural
+classifier_cbr_weight: 0.01
+ldam_max_margin: 0.1
+keep_val_macro_f1_min: 0.9154644535660744
+```
+
+This is the final coarse class-weight bracket for now: if `0.3` does not beat the new best, stop class-weight-power tuning and move to a qualitatively different structure/evidence direction.

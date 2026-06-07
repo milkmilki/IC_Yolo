@@ -46,7 +46,12 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - LDAM-DRW margin 0.1 + CBR 0.01 + polar spatial encoding completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_polarenc_tau04_e10_20260607_100351`; result: discard, val macro F1 `0.9010680369633918`.
    - LDAM-DRW margin 0.1 + CBR 0.01 + none-aware sampling completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_noneaware075_tau04_e10_20260607_110426`; result: discard, val macro F1 `0.8958599987513993`.
    - LDAM-DRW margin 0.1 + CBR 0.01 + class weight power 0.6 completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp06_tau04_e10_20260607_121941`; result: discard, val macro F1 `0.8982021938248087`.
-   - Launched class weight power 0.4 on 2026-06-07 13:26 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp04_tau04_e10_20260607_132608`; active run, monitor/recover this run first.
+   - LDAM-DRW margin 0.1 + CBR 0.01 + class weight power 0.4 completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp04_tau04_e10_20260607_132608`; result: keep, val macro F1 `0.9154644535660744`.
+   - Prepared config: `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_cwp03.yaml`.
+   - Planned run name: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp03_tau04_e10`.
+   - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam_m01_cbr010_cwp03.cmd`.
+   - Single factor over the new best: decrease `class_weight_power` from `0.4` to `0.3`; keep natural sampling, architecture, class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+   - If `cwp03` does not beat `0.9154644535660744`, stop class-weight-power tuning and move to a qualitatively different structure/evidence direction.
 
 ## Do Not Rerun
 
@@ -74,6 +79,7 @@ These 2026-06-05 candidates are already completed and recorded:
 - `stepcond_class_attention_ldam_m01_cbr010_polarenc`
 - `stepcond_class_attention_ldam_m01_cbr010_noneaware075`
 - `stepcond_class_attention_ldam_m01_cbr010_cwp06`
+- `stepcond_class_attention_ldam_m01_cbr010_cwp04`
 
 ## Evidence Package Commands
 

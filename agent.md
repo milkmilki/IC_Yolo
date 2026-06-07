@@ -520,3 +520,9 @@ Keep it short and operational.
   - rationale: after `0.6` failed badly, test the opposite hypothesis that the current recipe is slightly over-weighting rare classes.
   - launched on 2026-06-07 13:26 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp04_tau04_e10_20260607_132608` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010CWP04`; task was disabled after manual start to avoid a duplicate 23:59 trigger.
   - active run directory: `runs\classify\autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp04_tau04_e10_20260607_132608`; initial health check showed epoch 1 progressing on GPU.
+  - result on 2026-06-07: keep, params `10.527M`, val acc `0.982270`, macro P/R/F1 `0.925950 / 0.905714 / 0.915464`; no test metrics generated.
+  - current no-distill best is now `stepcond_class_attention_ldam_m01_cbr010_cwp04` with validation macro F1 `0.9154644535660744`.
+- Prepared class-attention LDAM-DRW + CBR 0.01 + class weight power 0.3 follow-up on 2026-06-07:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_cwp03.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m01_cbr010_cwp03.cmd`.
+  - single factor over the new best: decrease `class_weight_power` from `0.4` to `0.3`; keep natural sampling, architecture, class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+  - if `0.3` does not beat `0.9154644535660744`, stop class-weight-power tuning and move to qualitatively different structure/evidence work.
