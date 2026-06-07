@@ -26,6 +26,8 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - Recovery wrapper: `scripts/run_stepcond_class_attention_ldam_m01_cbr010_cwp06.cmd`.
    - Single factor over the current best: keep architecture/readout/sampler fixed, but increase `class_weight_power` from `0.5` to `0.6`.
    - Rationale: none-aware sampling was too disruptive. A modest objective-side increase in inverse-frequency class weighting may improve minority class macro F1 without changing the input distribution.
+   - Launched on 2026-06-07 12:19 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp06_tau04_e10_20260607_121941` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010CWP06`; task was disabled after manual start to avoid a duplicate 23:59 trigger.
+   - Initial health check showed epoch 1 progressing on GPU with `[ldam] max_margin=0.1000 starts at epoch 7` and `[cbr] classifier regularization weight=0.0100 ... starts at epoch 7`.
    - Added metadata-only external audit script: `scripts/audit_external_wafer_dataset.py`.
    - Added protocol doc: `research-wiki/external_wafer_robustness_protocol.md`.
    - No external wafer benchmark is currently present under `data/`; do not evaluate external performance until dataset placement, metadata audit, and label mapping are committed.

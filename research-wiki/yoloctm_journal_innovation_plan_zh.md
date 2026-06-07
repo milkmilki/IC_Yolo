@@ -1077,3 +1077,12 @@ keep_val_macro_f1_min: 0.9133844769616716
 ```
 
 This keeps the successful architecture and natural sampling fixed, but applies slightly stronger inverse-frequency weighting inside the loss.
+
+Launched on 2026-06-07 12:19 +08:00:
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp06_tau04_e10_20260607_121941
+task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010CWP06
+initial health: epoch 1 progressing, GPU active
+note: scheduled task disabled after manual start to avoid duplicate relaunch
+```
