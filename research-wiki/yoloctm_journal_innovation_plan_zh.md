@@ -1012,3 +1012,31 @@ task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010PolarEnc
 initial health: epoch 1 progressing, GPU active
 note: scheduled task disabled after manual start to avoid duplicate relaunch
 ```
+
+### Result: discard
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_polarenc_tau04_e10_20260607_100351
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.979803
+val macro P/R/F1: 0.894967 / 0.908520 / 0.901068
+threshold: 0.9133844769616716
+test: disabled
+```
+
+Interpretation: polar spatial encoding hurts macro F1 under the current best recipe. Stop wafer-prior token injection variants for now.
+
+## 2026-06-07 next candidate: None-Aware Sampling on Current Best
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_noneaware075.yaml
+train.sampling: none_aware
+none_sampling_ratio: 0.75
+classifier_cbr_weight: 0.01
+ldam_max_margin: 0.1
+keep_val_macro_f1_min: 0.9133844769616716
+```
+
+This keeps the architecture and loss fixed and changes only the training sampler to reduce exposure to the dominant `none` class. It is still validation-only and test-disabled.

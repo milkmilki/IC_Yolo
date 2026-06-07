@@ -497,3 +497,9 @@ Keep it short and operational.
   - single factor over the current best: set `spatial_encoding: polar`, while keeping class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
   - rationale: inject wafer radial/angular positional priors into CTM tokens after both fusion variants hurt validation macro F1.
   - launched on 2026-06-07 10:03 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_polarenc_tau04_e10_20260607_100351` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010PolarEnc`; task was disabled after manual start to avoid a duplicate 23:59 trigger. Initial health check showed epoch 1 progressing and GPU active.
+  - result on 2026-06-07: discard, params `10.527M`, val acc `0.979803`, macro P/R/F1 `0.894967 / 0.908520 / 0.901068`; no test metrics generated.
+  - interpretation: polar spatial encoding hurts validation macro F1; stop wafer-prior token injection variants for now.
+- Prepared class-attention LDAM-DRW + CBR 0.01 + none-aware sampling follow-up on 2026-06-07:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_noneaware075.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m01_cbr010_noneaware075.cmd`.
+  - single factor over the current best: change `train.sampling` from `natural` to `none_aware` with `none_sampling_ratio=0.75`; keep architecture, class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+  - rationale: tests training distribution control for the dominant `none` class after structural fusion and spatial prior attempts failed.
