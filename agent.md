@@ -526,3 +526,5 @@ Keep it short and operational.
   - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_cwp03.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m01_cbr010_cwp03.cmd`.
   - single factor over the new best: decrease `class_weight_power` from `0.4` to `0.3`; keep natural sampling, architecture, class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
   - if `0.3` does not beat `0.9154644535660744`, stop class-weight-power tuning and move to qualitatively different structure/evidence work.
+  - launched on 2026-06-07 14:20 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp03_tau04_e10_20260607_142019` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010CWP03`; task was disabled after manual start to avoid a duplicate 23:59 trigger.
+  - active run directory: `runs\classify\autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp03_tau04_e10_20260607_142019`; initial health check showed epoch 1 progressing on GPU.

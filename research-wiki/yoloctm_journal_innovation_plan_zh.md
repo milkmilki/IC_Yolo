@@ -1151,3 +1151,12 @@ keep_val_macro_f1_min: 0.9154644535660744
 ```
 
 This is the final coarse class-weight bracket for now: if `0.3` does not beat the new best, stop class-weight-power tuning and move to a qualitatively different structure/evidence direction.
+
+Launched on 2026-06-07 14:20 +08:00:
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp03_tau04_e10_20260607_142019
+task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010CWP03
+initial health: epoch 1 progressing, GPU active
+note: scheduled task disabled after manual start to avoid duplicate relaunch
+```
