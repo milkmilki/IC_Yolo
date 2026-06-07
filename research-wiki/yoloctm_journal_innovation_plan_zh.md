@@ -1114,3 +1114,12 @@ keep_val_macro_f1_min: 0.9133844769616716
 ```
 
 This is the opposite one-factor check after `0.6` failed: keep architecture and sampler fixed, but reduce inverse-frequency weighting to test whether the current best is slightly over-weighted toward rare classes.
+
+Launched on 2026-06-07 13:26 +08:00:
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp04_tau04_e10_20260607_132608
+task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010CWP04
+initial health: epoch 1 progressing, GPU active
+note: scheduled task disabled after manual start to avoid duplicate relaunch
+```

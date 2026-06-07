@@ -46,6 +46,7 @@ This queue is for the no-distillation, <=10 epoch, validation-only AutoResearch 
    - LDAM-DRW margin 0.1 + CBR 0.01 + polar spatial encoding completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_polarenc_tau04_e10_20260607_100351`; result: discard, val macro F1 `0.9010680369633918`.
    - LDAM-DRW margin 0.1 + CBR 0.01 + none-aware sampling completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_noneaware075_tau04_e10_20260607_110426`; result: discard, val macro F1 `0.8958599987513993`.
    - LDAM-DRW margin 0.1 + CBR 0.01 + class weight power 0.6 completed on 2026-06-07 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp06_tau04_e10_20260607_121941`; result: discard, val macro F1 `0.8982021938248087`.
+   - Launched class weight power 0.4 on 2026-06-07 13:26 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp04_tau04_e10_20260607_132608`; active run, monitor/recover this run first.
 
 ## Do Not Rerun
 
