@@ -504,3 +504,9 @@ Keep it short and operational.
   - single factor over the current best: change `train.sampling` from `natural` to `none_aware` with `none_sampling_ratio=0.75`; keep architecture, class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
   - rationale: tests training distribution control for the dominant `none` class after structural fusion and spatial prior attempts failed.
   - launched on 2026-06-07 11:04 +08:00 as `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_noneaware075_tau04_e10_20260607_110426` via scheduled task `WM811K_AutoResearch_ClassAttentionLDAMM01CBR010NoneAware075`; task was disabled after manual start to avoid a duplicate 23:59 trigger. Initial health check showed epoch 1 progressing and none-aware target mix with `none:0.750`.
+  - result on 2026-06-07: discard, params `10.527M`, val acc `0.977105`, macro P/R/F1 `0.857400 / 0.944613 / 0.895860`; no test metrics generated.
+  - interpretation: none-aware sampling over-corrected class balance, boosting recall but collapsing precision; stop none-aware sampler variants for now.
+- Prepared class-attention LDAM-DRW + CBR 0.01 + class weight power 0.6 follow-up on 2026-06-07:
+  - added `AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_cwp06.yaml` and recovery wrapper `scripts/run_stepcond_class_attention_ldam_m01_cbr010_cwp06.cmd`.
+  - single factor over the current best: increase `class_weight_power` from `0.5` to `0.6`; keep natural sampling, architecture, class-specific attention readout, `ldam_max_margin=0.1`, `classifier_cbr_weight=0.01`, no distillation, 10 epochs, validation-only screening, and `test.enabled: false`.
+  - rationale: tests a conservative objective-side imbalance adjustment after sampling-level rebalancing failed.

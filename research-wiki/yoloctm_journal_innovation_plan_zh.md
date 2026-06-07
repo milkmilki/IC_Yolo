@@ -1049,3 +1049,31 @@ task: WM811K_AutoResearch_ClassAttentionLDAMM01CBR010NoneAware075
 initial health: epoch 1 progressing, none-aware target none=0.750, GPU active
 note: scheduled task disabled after manual start to avoid duplicate relaunch
 ```
+
+### Result: discard
+
+```text
+run: autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_noneaware075_tau04_e10_20260607_110426
+status: discard
+params: 10.527M
+epochs: 10
+val acc: 0.977105
+val macro P/R/F1: 0.857400 / 0.944613 / 0.895860
+threshold: 0.9133844769616716
+test: disabled
+```
+
+Interpretation: none-aware sampling over-corrects the dominant `none` class: recall improves, but precision collapses and macro F1 falls far below the current best. Stop sampler-level none-aware variants for now.
+
+## 2026-06-07 next candidate: Class Weight Power 0.6
+
+```text
+AutoResearch/configs/wm811k_autoresearch_stepcond_class_attention_ldam_m01_cbr010_cwp06.yaml
+class_weight_power: 0.6
+train.sampling: natural
+classifier_cbr_weight: 0.01
+ldam_max_margin: 0.1
+keep_val_macro_f1_min: 0.9133844769616716
+```
+
+This keeps the successful architecture and natural sampling fixed, but applies slightly stronger inverse-frequency weighting inside the loss.
