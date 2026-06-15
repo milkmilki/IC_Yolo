@@ -1,199 +1,220 @@
-# IC_Yolo
+# IC_Yolo / WM811K YoloCTM
 
-WM-811K wafer map defect classification with Ultralytics YOLO classification models.
+WM-811K wafer-map defect classification experiments built around Ultralytics
+YOLO classification backbones and a custom YoloCTM recurrent token head.
 
-This repository focuses on preparing the WM-811K dataset into an image-folder
-classification layout, then training or smoke-testing a YOLO classification model.
-It no longer contains a PCB detection workflow.
+Despite the historical repository name, this is no longer a PCB detection
+project. The current code prepares WM-811K wafer maps into an image-folder
+classification dataset, trains YOLO baselines, and runs YoloCTM ablations for
+long-tailed wafer defect recognition.
 
-## Project Files
+## Current Snapshot
 
-- `scripts/prepare_wm811k_classification.py`: converts `LSWMD.pkl` wafer maps into PNG images arranged by class and split.
-- `scripts/train_wm811k_cls.py`: trains a YOLO classification model on the prepared WM-811K dataset.
-- `scripts/train_wm811k_yoloctm.py`: trains the proposed YoloCTM (YOLO backbone + spatial CTM head) classifier on WM-811K.
-- `scripts/run_wm811k_cls_test.py`: runs a small CPU-friendly smoke test using a fraction of the dataset.
-- `requirements.txt`: Python dependencies.
+- Dataset: WM-811K, prepared as `data/wm811k_cls/{train,val,test}/{class}/*.png`
+- Classes: 9 classes when `none` is included
+- Fixed split used by recent experiments: `70 / 15 / 15`
+- Image size: `224`
+- Main baseline: Ultralytics YOLO classification
+- Main research model: YOLO classification backbone + spatial CTM-style
+  recurrent token head
+- Experiment ledger: `AutoResearch/results.tsv`
+- Detailed run summaries: `AutoResearch/logs/*.json`
 
-## Dataset
+The best frozen single-model milestone recorded in this archive is:
 
-The expected source file is the WM-811K pickle file:
+- Run: `autoresearch_yoloctm_slim_dkd_ema_calselect_priorcal_20260527_175645`
+- Params: about `10.525M`
+- Test accuracy: `0.98242`
+- Test macro precision / recall / F1: `0.91093 / 0.92941 / 0.91878`
 
-```text
-data/MIR-WM811K/LSWMD.pkl
+Later AutoResearch entries after that milestone are validation-only screening
+runs unless explicitly marked otherwise. The latest no-distillation validation
+best in the checked-in ledger is:
+
+- Run: `autoresearch_yoloctm_nodistill_stepcond_class_attention_ldam_m01_cbr010_cwp04_tau04_e10_20260607_132608`
+- Validation accuracy: `0.98227`
+- Validation macro precision / recall / F1: `0.92595 / 0.90571 / 0.91546`
+- Test split: not evaluated for this screening run
+
+## Repository Map
+
+- `configs/wm811k_cls.yaml` - main YAML-driven pipeline config.
+- `scripts/prepare_wm811k_classification.py` - converts `LSWMD.pkl` into
+  Ultralytics image-folder classification format.
+- `scripts/train_wm811k_cls.py` - minimal Ultralytics YOLO classifier trainer.
+- `scripts/train_wm811k_yoloctm.py` - standalone PyTorch YoloCTM trainer.
+- `scripts/run_wm811k_pipeline.py` - prepare/train/validate/test pipeline.
+- `scripts/evaluate_wm811k_cls.py` - metrics export for YOLO classification
+  checkpoints.
+- `AutoResearch/` - experiment queue, configs, run ledger, and JSON summaries.
+- `research-wiki/` - notes for robustness, papers, gaps, and report material.
+- `refine-logs/` and `review-stage/` - historical refinement and review notes.
+- `agent.md` - operational runbook for this workstation and experiment history.
+
+Large local artifacts are intentionally ignored by Git: raw data, prepared
+images, training runs, checkpoints, caches, and Kaggle credentials.
+
+## Environment
+
+Recommended Windows environment for the development machine:
+
+```powershell
+D:\anaconda3\envs\pcb_yolo\python.exe -m pip install -r requirements.txt
 ```
 
-The preparation script also searches recursively under the source directory for
-`LSWMD.pkl`.
-
-By default, the script uses the common 8-class setup and excludes the `none`
-class. Add `--include-none` if you want to keep it.
-
-Classes:
-
-- `Center`
-- `Donut`
-- `Edge-Loc`
-- `Edge-Ring`
-- `Loc`
-- `Random`
-- `Scratch`
-- `Near-full`
-- `none` optional
-
-## Setup
-
-Install dependencies:
+If using another Python environment:
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-## Prepare The Dataset
+Core dependencies are Ultralytics, PyTorch through Ultralytics, PyYAML, NumPy,
+Pandas, Pillow, scikit-learn, tqdm, OpenCV, and Requests.
 
-Convert WM-811K wafer maps into YOLO classification folders:
+## Dataset Preparation
 
-```powershell
-python scripts/prepare_wm811k_classification.py --source data/MIR-WM811K --output data/wm811k_cls --image-size 224 --overwrite
+Expected raw source:
+
+```text
+data/MIR-WM811K/LSWMD.pkl
 ```
 
-Default split ratios are `60 / 15 / 25` for `train / val / test`. You can change
-them with:
+Prepare the current 9-class dataset, including the dominant `none` class:
 
 ```powershell
-python scripts/prepare_wm811k_classification.py --source data/MIR-WM811K --output data/wm811k_cls --ratios 7 2 1 --image-size 224 --overwrite
+python scripts/prepare_wm811k_classification.py `
+  --source data/MIR-WM811K `
+  --output data/wm811k_cls `
+  --image-size 224 `
+  --include-none `
+  --ratios 70 15 15 `
+  --overwrite
 ```
 
-Prepared layout:
+The resulting layout is:
 
 ```text
 data/wm811k_cls/
-  train/
-    Center/
-    Donut/
-    ...
-  val/
-    Center/
-    Donut/
-    ...
-  test/
-    Center/
-    Donut/
-    ...
+  train/<class_name>/*.png
+  val/<class_name>/*.png
+  test/<class_name>/*.png
   dataset_summary.json
 ```
 
-## Train
+The prepared dataset is large and ignored by Git. Do not enumerate it
+recursively in routine checks.
 
-Train a YOLO classification model:
+## Quick Commands
 
-```powershell
-python scripts/train_wm811k_cls.py --data data/wm811k_cls --model yolov8n-cls.pt --epochs 40 --imgsz 224 --batch 64 --device 0
-```
-
-Use `--device cpu` if CUDA is not available.
-
-
-Train the YoloCTM variant:
+Check the resolved pipeline plan without training:
 
 ```powershell
-python scripts/train_wm811k_yoloctm.py --data data/wm811k_cls --model yolov8n-cls.pt --epochs 40 --imgsz 224 --batch 64 --device 0 --name wm811k_yoloctm
+D:\anaconda3\envs\pcb_yolo\python.exe scripts\run_wm811k_pipeline.py `
+  --config configs\wm811k_cls.yaml `
+  --check-config
 ```
 
-
-## Run From YAML
-
-The full prepare/train/validate/test workflow can be driven by:
+Train a YOLO classification baseline:
 
 ```powershell
-conda run --no-capture-output -n pcb_yolo python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml
+python scripts/train_wm811k_cls.py `
+  --data data/wm811k_cls `
+  --model yolov8n-cls.pt `
+  --epochs 40 `
+  --imgsz 224 `
+  --batch 64 `
+  --device 0
 ```
 
-The YAML config controls the algorithm, model config file, pretrained weights,
-dataset split ratios, training arguments, validation split, test split, and log filename. Foreground and
-background PowerShell commands are included as comments at the top of
-`configs/wm811k_cls.yaml`.
+Train the YoloCTM model directly:
 
-Select the training algorithm with:
+```powershell
+python scripts/train_wm811k_yoloctm.py `
+  --data data/wm811k_cls `
+  --weights yolo26m-cls.pt `
+  --epochs 40 `
+  --imgsz 224 `
+  --batch 64 `
+  --device 0 `
+  --name wm811k_yoloctm
+```
+
+Run the YAML-driven pipeline:
+
+```powershell
+D:\anaconda3\envs\pcb_yolo\python.exe scripts\run_wm811k_pipeline.py `
+  --config configs\wm811k_cls.yaml
+```
+
+Run a small CPU smoke test:
+
+```powershell
+python scripts/run_wm811k_cls_test.py `
+  --data data/wm811k_cls `
+  --model yolo26m-cls.pt `
+  --epochs 1 `
+  --device cpu `
+  --fraction 0.05
+```
+
+## Pipeline Notes
+
+`scripts/run_wm811k_pipeline.py` supports two algorithm modes:
 
 ```yaml
 model:
-  algorithm: yolo      # or yoloctm
-  config: null         # optional architecture YAML
-  weights: yolo26m-cls.pt
-  pretrained: true
+  algorithm: yolo      # Ultralytics YOLO classifier
 ```
 
-For the spatial CTM head, set `algorithm: yoloctm`; CTM-specific parameters
-live under `model.ctm`.
-
-For calibrated YoloCTM experiments, `train.selection_prior_logit_tau` optionally
-applies a fixed class-prior logit adjustment only while selecting the best
-validation checkpoint. Final metric calibration remains configured under
-`metrics.prior_logit_tau`.
-
-During iterative AutoResearch screening, set `test.enabled: false`, evaluate
-only `metrics.splits: [val]`, and use a predeclared calibration value. Reserve
-the test split for a promoted milestone checkpoint instead of selecting
-experiments from repeated test feedback.
-
-`train.ema_decay` optionally exports an exponential-moving-average YoloCTM
-checkpoint for validation and inference; set it to `0` to keep the ordinary
-online-weight behavior.
-
-For non-distilled long-tail trials, `model.ctm.loss: ldam_drw` enables a
-deferred LDAM-inspired target margin controlled by `ldam_max_margin` and
-`ldam_start_epoch`; it preserves the existing weighted cross-entropy outside
-the configured margin phase.
-
-Independent external benchmarks such as MixedWM38 require a separately declared
-label-mapping or mixed-defect evaluation protocol; they should not be silently
-substituted for the WM811K held-out split.
-
-Before any external wafer benchmark evaluation, run the metadata-only audit
-described in `research-wiki/external_wafer_robustness_protocol.md`. The audit
-does not score a model and skips folders named `test` by default.
-
-Set `prepare.enabled: false` in the YAML to reuse the existing prepared dataset
-without regenerating the train/val/test split on every run.
-
-Check the resolved plan without running training:
-
-```powershell
-python scripts/run_wm811k_pipeline.py --config configs/wm811k_cls.yaml --check-config
+```yaml
+model:
+  algorithm: yoloctm   # YOLO backbone + CTM recurrent token head
 ```
 
-Pipeline logs are streamed to the console and written in real time under the
-current run directory, for example:
+For `algorithm: yolo`, the pipeline trains with Ultralytics and later loads:
 
 ```text
-runs/classify/wm811k_yolo26m_YYYYMMDD_HHMMSS/pipeline.log
+runs/classify/<run_name>/weights/best.pt
 ```
 
-When `metrics.enabled: true`, the pipeline also writes precision, recall,
-F1-score, support, and confusion matrix CSV files under:
+For `algorithm: yoloctm`, the pipeline calls
+`scripts/train_wm811k_yoloctm.py` and expects:
+
+```text
+runs/classify/<run_name>/best_yoloctm.pt
+```
+
+Metrics are written under:
 
 ```text
 runs/classify/<run_name>/metrics/
 ```
 
-## Smoke Test
+YoloCTM metrics are written by the pipeline. YOLO baseline metrics use
+`scripts/evaluate_wm811k_cls.py`.
 
-Run a quick test on a small fraction of the dataset:
+## Experiment Archive
 
-```powershell
-python scripts/run_wm811k_cls_test.py --data data/wm811k_cls --model yolo11m-cls.pt --epochs 1 --device cpu --fraction 0.05
-```
+Use these files to understand or resume the research thread:
 
-The script validates that `train`, `val`, and `test` folders exist before
-starting training.
+- `AutoResearch/results.tsv` - compact table of every logged run.
+- `AutoResearch/logs/*.json` - one summary file per run.
+- `AutoResearch/configs/*.yaml` - exact candidate configs.
+- `AutoResearch/experiment_queue.md` - queued and completed ideas.
+- `agent.md` - chronological operational notes and best-result snapshots.
+- `research-wiki/yoloctm_nodistill_short_paper_zh.md` - Chinese report draft.
 
-## Outputs
+Recent validation-only screening intentionally avoids repeated test-set access.
+Only promoted milestones should be evaluated on `test`.
 
-Training outputs are written under:
+## Development Cautions
 
-```text
-runs/classify/
-```
+- Prefer the local development path `E:\Cjn\PCB_Yolo` for long training jobs.
+- The mounted `R:\Cjn\PCB_Yolo` path is fine for editing and inspection.
+- Use `D:\anaconda3\envs\pcb_yolo\python.exe` when reproducing recorded
+  pipeline commands.
+- Keep `workers: 0` on this Windows setup unless you are deliberately testing
+  data-loader behavior.
+- Do not casually regenerate `data/wm811k_cls`; reproducibility depends on the
+  fixed seed, ratios, and `include_none` setting.
 
-Dataset files, model checkpoints, training runs, Kaggle credentials, and cache
-files are intentionally ignored by Git.
